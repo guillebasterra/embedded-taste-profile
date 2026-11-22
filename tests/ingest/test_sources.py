@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 
 import httpx
 import pytest
@@ -241,3 +242,29 @@ def test_fetch_local(tmp_path, home):
 def test_fetch_local_missing_dir(tmp_path, home):
     with pytest.raises(IngestError, match="Not a directory"):
         sources.fetch_local(Store(home), tmp_path / "nope")
+
+
+def test_fetch_local_reads_gallery_dl_sidecars(tmp_path, home):
+    # trimmed from a real gallery-dl --write-metadata sidecar
+    board = tmp_path / "pinterest" / "me" / "Agent Crowd"
+    board.mkdir(parents=True)
+    (board / "pinterest_e1_abc.jpg").write_bytes(image_bytes((30, 90, 40), (12, 20)))
+    (board / "pinterest_e1_abc.jpg.json").write_text(json.dumps({
+        "id": "e1_abc", "title": "", "grid_title": "Tadpoles", "description": "",
+        "alt_text": None, "auto_alt_text": "green bubbles with small yellow birds in them",
+        "link": None, "url": "https://i.pinimg.com/originals/33/ab/ba/33ab.jpg",
+        "created_at": "Sat, 21 Nov 2026 16:44:58 +0000",
+        "board": {"id": "569635121558272071", "name": "Agent Crowd"}}))
+    (board / "plain.jpg").write_bytes(image_bytes((1, 1, 1)))
+    (board / "broken.jpg").write_bytes(image_bytes((2, 2, 2)))
+    (board / "broken.jpg.json").write_text("{not json")
+    pins = {p.title: p for p in sources.fetch_local(Store(home).ensure(),
+                                                    tmp_path / "pinterest" / "me").pins}
+    assert set(pins) == {"Tadpoles", "plain", "broken"}
+    tad = pins["Tadpoles"]
+    assert tad.id.startswith("local:") and tad.board == "Agent Crowd"
+    assert tad.board_id == "569635121558272071"
+    assert tad.alt_text == "green bubbles with small yellow birds in them"
+    assert tad.description is None and tad.link is None
+    assert tad.image_url.endswith("33ab.jpg") and tad.created_at.year == 2026
+    assert pins["plain"].board_id is None and pins["plain"].alt_text is None

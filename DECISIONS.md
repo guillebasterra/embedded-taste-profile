@@ -30,6 +30,7 @@ Calls made without asking, newest last. One line each.
 - Live run: Pinterest answers 401 `{code: 3, "consumer type is not supported"}` for an app whose access level is not enough. That is not retried with a token refresh and gets its own message pointing at the developer portal and the local/public sources; other 401s now include Pinterest's message and mention `PINTEREST_ACCESS_TOKEN` (since `taste auth` is a no-op while it is set).
 - Pinterest app review site lives in `docs/` (GitHub Pages from `main:/docs`): a landing page and a privacy policy that discloses the Anthropic upload of exemplar images; contact is GitHub issues, so no email is published.
 - While the API app is unapproved, pins come from gallery-dl (public boards, no cookies) into `TASTE_HOME/gallery-dl/` with a download archive, then `taste ingest --source local`; kept in the home so reruns are incremental.
+- Local ingest reads gallery-dl `--write-metadata` sidecars (`<image>.json`) when present for title (`title`, else `grid_title`), description, alt text (`alt_text`, else Pinterest's `auto_alt_text`), link, board id, original URL and created date. Pin ids stay `local:<sha1>` per spec; board and section still come from the folders so `boards.toml` keys do not depend on the sidecar.
 
 ## B — embed / cluster / scoring
 - Embedder `name` for SigLIP is the model id itself (`Store` slugs it), so switching `TASTE_EMBED_MODEL` gets its own embeddings directory.

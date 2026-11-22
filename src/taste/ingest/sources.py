@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import re
 import shutil
 from dataclasses import dataclass, field
@@ -266,10 +267,54 @@ def fetch_local(store: Store, root: str | Path, limit: int | None = None) -> Loc
         else:
             shutil.copyfile(path, dest)
             result.copied += 1
+        meta = gallery_dl_metadata(path)
         result.pins.append(Pin(
             id=pin_id, source="local",
             board=parts[0] if len(parts) > 1 else root.name,
+            board_id=meta.get("board_id"),
             section=parts[1] if len(parts) > 2 else None,
-            title=path.stem, image_path=store.rel(dest), width=width, height=height,
+            title=meta.get("title") or path.stem, description=meta.get("description"),
+            alt_text=meta.get("alt_text"), link=meta.get("link"),
+            image_url=meta.get("image_url"), created_at=meta.get("created_at"),
+            image_path=store.rel(dest), width=width, height=height,
         ))
     return result
+
+
+def gallery_dl_metadata(image: Path) -> dict:
+    """Pin fields from a gallery-dl `--write-metadata` sidecar (`<image>.json`), if any.
+    Without it, local pins only have their file name, which is noise to the VLM."""
+    sidecar = image.with_name(image.name + ".json")
+    try:
+        raw = json.loads(sidecar.read_text())
+    except (OSError, ValueError):
+        return {}
+    if not isinstance(raw, dict):
+        return {}
+
+    def text(*keys: str) -> str | None:
+        for key in keys:
+            value = raw.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+        return None
+
+    board = raw.get("board") if isinstance(raw.get("board"), dict) else {}
+    return {k: v for k, v in {
+        "board_id": str(board["id"]) if board.get("id") else None,
+        "title": text("title", "grid_title"),
+        "description": text("description", "unauth_on_page_description"),
+        "alt_text": text("alt_text", "auto_alt_text", "seo_alt_text"),
+        "link": text("link"),
+        "image_url": text("url"),
+        "created_at": _parse_dt(raw.get("created_at")) or _parse_rfc2822(raw.get("created_at")),
+    }.items() if v}
+
+
+def _parse_rfc2822(value: object) -> datetime | None:
+    if not isinstance(value, str) or not value:
+        return None
+    try:
+        return parsedate_to_datetime(value)
+    except (TypeError, ValueError):
+        return None
