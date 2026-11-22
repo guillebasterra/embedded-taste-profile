@@ -13,6 +13,8 @@ from taste.ingest.errors import ApiError, AuthError, RateLimitStop
 
 API_BASE = "https://api.pinterest.com/v5"
 MAX_PAGE_SIZE = 250
+# 401 body seen live: {"code": 3, "message": "Your application consumer type is not supported..."}
+APP_NOT_PERMITTED = 3
 
 
 class TokenProvider(Protocol):
@@ -42,6 +44,16 @@ def retry_after_seconds(resp: httpx.Response) -> float | None:
         except ValueError:
             pass
     return None
+
+
+def _error_body(resp: httpx.Response) -> tuple[int | None, str]:
+    """Pinterest's `{code, message}` error body, tolerating anything else."""
+    try:
+        body = resp.json()
+        code = body.get("code")
+        return (code if isinstance(code, int) else None), str(body.get("message") or "")[:200]
+    except Exception:
+        return None, ""
 
 
 class PinterestClient:
@@ -76,10 +88,21 @@ class PinterestClient:
             if status == 200:
                 return resp.json()
             if status == 401:
+                code, message = _error_body(resp)
+                if code == APP_NOT_PERMITTED:  # app-level, so a new token will not help
+                    raise AuthError(
+                        f"Pinterest refused the app, not the token ({message or 'code 3'}). "
+                        "The developer app's access level does not allow these API calls yet; "
+                        "check its status at https://developers.pinterest.com/apps/. Meanwhile "
+                        "use `taste ingest --source local` or `--source public`.")
                 if not refreshed and self.tokens.refresh():
                     refreshed = True
                     continue
-                raise AuthError("Pinterest rejected the access token. Run `taste auth` again.")
+                raise AuthError(
+                    "Pinterest rejected the access token"
+                    + (f" ({message})" if message else "")
+                    + ". If PINTEREST_ACCESS_TOKEN is set, replace or remove it; "
+                    "otherwise run `taste auth` again.")
             if status == 429:
                 wait = retry_after_seconds(resp)
                 if attempt >= self.max_retries or (wait is not None and wait > self.max_wait):
@@ -92,12 +115,7 @@ class PinterestClient:
                 self.sleep(min(self.backoff * 2 ** attempt, self.max_wait))
                 attempt += 1
                 continue
-            message = ""
-            try:
-                message = str(resp.json().get("message") or "")[:200]
-            except Exception:
-                pass
-            raise ApiError(status, message)
+            raise ApiError(status, _error_body(resp)[1])
 
     def paginate(self, path: str, params: dict[str, Any] | None = None) -> Iterator[dict]:
         """Yield items across pages, following `bookmark` until it is null."""

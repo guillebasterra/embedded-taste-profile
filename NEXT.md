@@ -3,13 +3,13 @@
 Everything here was built and tested offline: 200 tests pass and the full pipeline runs end to end on synthetic boards with the fake embedder and fake VLM. Nothing below has been run against the real thing yet. Work through it in order and fix what breaks.
 
 ## 1. Real embedder
-- [ ] `uv sync --extra ml`, then `taste embed` on a small local folder (20-50 images).
-- [ ] `src/taste/embed/siglip.py` loads `google/siglip2-base-patch16-384`, picks mps, and `get_image_features` / `get_text_features` return plain tensors on the installed transformers version.
-- [ ] `taste search "<something obvious>"` returns sensible pins.
+- [x] `uv sync --extra ml`, then `taste embed` on a small local folder (20-50 images). (2026-11-22: torch 2.15, transformers 5.24, 30 synthetic images; first run downloads weights, ~5 min.)
+- [x] `src/taste/embed/siglip.py` loads `google/siglip2-base-patch16-384`, picks mps, and `get_image_features` / `get_text_features` return plain tensors on the installed transformers version.
+- [x] `taste search "<something obvious>"` returns sensible pins. (top 5 all from the right board for red/blue/stripes/yellow; ~3 s per search incl. model load.)
 
 ## 2. Ingest my boards
 - [ ] Local route: gallery-dl output folder -> `taste ingest --source local`. Check board names come through as folder names.
-- [ ] API route (only if the Pinterest app gets approved): `taste auth` round trip, real 429 shape, real `media.images` keys, whether board pins already include section pins.
+- [ ] API route (only if the Pinterest app gets approved): 2026-11-22 the token gets 401 code 3 "consumer type is not supported" on every endpoint, so the app is not approved for v5 reads yet. `taste auth` round trip, real 429 shape, real `media.images` keys, whether board pins already include section pins.
 - [ ] `taste domains`, then hand-edit `boards.toml`.
 
 ## 3. Clustering on real embeddings

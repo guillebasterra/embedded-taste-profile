@@ -93,6 +93,33 @@ def test_401_with_static_token_fails_fast():
 
 
 @respx.mock
+def test_401_app_not_permitted_does_not_refresh_and_says_why():
+    # body and headers as returned live for an app whose access level is not enough
+    route = respx.get(f"{API}/boards").mock(return_value=httpx.Response(401, headers={
+        "x-ratelimit-limit": '100, 100;w=1;name="safety_net_app_id_user_id"',
+        "x-ratelimit-remaining": "99", "x-ratelimit-reset": "1"},
+        json={"code": 3, "message": "Your application consumer type is not supported, "
+                                    "please contact support."}))
+    tokens = Tokens()
+    with httpx.Client() as http, pytest.raises(AuthError, match="refused the app") as err:
+        client, _ = make_client(http, tokens)
+        list(client.boards())
+    assert "consumer type" in str(err.value) and "--source local" in str(err.value)
+    assert tokens.refreshes == 0 and route.call_count == 1
+
+
+@respx.mock
+def test_401_message_mentions_env_token_and_pinterest_reason():
+    respx.get(f"{API}/boards").mock(return_value=httpx.Response(
+        401, json={"code": 2, "message": "Authentication failed."}))
+    with httpx.Client() as http, pytest.raises(AuthError) as err:
+        client, _ = make_client(http, Tokens(can_refresh=False))
+        list(client.boards())
+    assert "Authentication failed." in str(err.value)
+    assert "PINTEREST_ACCESS_TOKEN" in str(err.value)
+
+
+@respx.mock
 def test_429_honors_retry_after_then_succeeds():
     route = respx.get(f"{API}/boards").mock(side_effect=[
         httpx.Response(429, headers={"Retry-After": "7"}, json={"message": "slow down"}),

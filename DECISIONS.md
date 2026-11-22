@@ -27,6 +27,7 @@ Calls made without asking, newest last. One line each.
 - Access tokens are refreshed 60 s before expiry; when Pinterest does not rotate the refresh token the old one is kept. With `PINTEREST_ACCESS_TOKEN` set, a 401 fails immediately (nothing to refresh with).
 - Domain heuristics match whole word tokens (plus plural, and prefix/suffix for keywords of 4+ letters) instead of substrings, so "building" is not `ui` and "party" is not `art`; most hits wins, ties go web > photo > fashion > art. Keyword lists extend the spec's examples.
 - `taste domains` rewrites `boards.toml` only when it adds a board, so hand edits and comments survive no-op runs (adding a board re-serializes the file and drops comments: `Store.write_boards` limitation). Boards with no pins left are kept.
+- Live run: Pinterest answers 401 `{code: 3, "consumer type is not supported"}` for an app whose access level is not enough. That is not retried with a token refresh and gets its own message pointing at the developer portal and the local/public sources; other 401s now include Pinterest's message and mention `PINTEREST_ACCESS_TOKEN` (since `taste auth` is a no-op while it is set).
 
 ## B — embed / cluster / scoring
 - Embedder `name` for SigLIP is the model id itself (`Store` slugs it), so switching `TASTE_EMBED_MODEL` gets its own embeddings directory.
