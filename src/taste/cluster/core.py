@@ -24,6 +24,9 @@ DEFAULT_MIN_SIZE = 4
 # A small cluster joins the nearest full-size one if their average-linkage distance is within
 # threshold * MERGE_SLACK (it has to be above the threshold, or they would already be one).
 MERGE_SLACK = 1.25
+# A rerun's cluster keeps an old id when their centroids are within threshold * this.
+# Centroids sit much closer than the average pairwise distance the threshold cuts at.
+ID_MATCH_FRACTION = 0.5
 MAX_EXEMPLARS = 12
 MAX_NEIGHBORS = 3
 MAX_PALETTE = 6
@@ -47,6 +50,8 @@ class ClusterResult:
     clusters: list[ClusterRecord] = field(default_factory=list)
     unclustered: list[str] = field(default_factory=list)
     domains: list[DomainReport] = field(default_factory=list)
+    kept_ids: list[str] = field(default_factory=list)  # ids carried over from the last run
+    retired_ids: list[str] = field(default_factory=list)  # last run's ids with no successor
 
 
 def _unit(v: np.ndarray) -> np.ndarray:
@@ -201,9 +206,54 @@ def build_clusters(ids: list[str], vectors: np.ndarray, pin_domains: dict[str, s
     return result
 
 
+def _id_number(cluster_id: str) -> int:
+    try:
+        return int(cluster_id.rsplit("-", 1)[1])
+    except (IndexError, ValueError):
+        return 0
+
+
+def stabilize_ids(new: list[ClusterRecord], old: list[ClusterRecord],
+                  max_distance: float) -> tuple[list[ClusterRecord], dict[str, str]]:
+    """Give new clusters the ids of the old clusters they continue, so cards, feedback and
+    links survive a rerun. Per domain, centroids are matched one-to-one (Hungarian, most
+    similar overall) and a pair counts only within `max_distance` cosine distance. Unmatched
+    clusters get the next number above every id in use for that domain. Neighbor ids are
+    remapped. Returns the renamed records and the {new draft id: final id} map."""
+    from scipy.optimize import linear_sum_assignment
+
+    rename: dict[str, str] = {}
+    for domain in DOMAINS:
+        fresh = [c for c in new if c.domain == domain]
+        prior = [c for c in old if c.domain == domain]
+        if not fresh:
+            continue
+        taken: set[str] = set()
+        if prior:
+            a = _unit(np.asarray([c.centroid for c in fresh], dtype=np.float32))
+            b = _unit(np.asarray([c.centroid for c in prior], dtype=np.float32))
+            dist = 1.0 - a @ b.T
+            for i, j in zip(*linear_sum_assignment(dist)):
+                if dist[i, j] <= max_distance:
+                    rename[fresh[i].id] = prior[j].id
+                    taken.add(prior[j].id)
+        next_n = max([_id_number(c.id) for c in prior] + [0]) + 1
+        for c in fresh:  # already in size order, so new ids still follow size
+            if c.id not in rename:
+                rename[c.id] = f"{domain}-{next_n:02d}"
+                next_n += 1
+    renamed = [c.model_copy(update={
+        "id": rename[c.id],
+        "neighbor_cluster_ids": [rename.get(n, n) for n in c.neighbor_cluster_ids],
+    }) for c in new]
+    return renamed, rename
+
+
 def cluster_store(store: Store, model: str, *, threshold: float = DEFAULT_THRESHOLD,
-                  min_size: int = DEFAULT_MIN_SIZE, write: bool = True) -> ClusterResult:
-    """Cluster the store's pins from embeddings/<model>/ and write clusters.json."""
+                  min_size: int = DEFAULT_MIN_SIZE, write: bool = True,
+                  keep_ids: bool = True) -> ClusterResult:
+    """Cluster the store's pins from embeddings/<model>/ and write clusters.json.
+    With `keep_ids`, clusters that continue one in the existing clusters.json keep its id."""
     ids, vectors = store.read_embeddings(model)
     if not ids:
         raise RuntimeError(f"No embeddings for {model!r}. Run `taste embed` first.")
@@ -211,6 +261,13 @@ def cluster_store(store: Store, model: str, *, threshold: float = DEFAULT_THRESH
         ids, vectors, store.pin_domains(), pins={p.id: p for p in store.read_pins()},
         image_root=store.home, threshold=threshold, min_size=min_size,
     )
+    old = store.read_clusters() if keep_ids else []
+    # a different embedding size means a different model: nothing to match against
+    if old and result.clusters and len(old[0].centroid) == len(result.clusters[0].centroid):
+        result.clusters, rename = stabilize_ids(result.clusters, old,
+                                                threshold * ID_MATCH_FRACTION)
+        result.kept_ids = sorted(v for v in rename.values() if v in {c.id for c in old})
+        result.retired_ids = sorted({c.id for c in old} - set(rename.values()))
     if write:
         store.write_clusters(result.clusters)
     return result

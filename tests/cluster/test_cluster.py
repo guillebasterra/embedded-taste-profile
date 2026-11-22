@@ -166,3 +166,55 @@ def test_cluster_cli(tmp_path, monkeypatch):
     for cid in ("web-01", "web-02", "photo-01", "photo-02", "fashion-01"):
         assert cid in result.output
     assert len(store.read_clusters()) == 5
+
+
+def test_ids_stay_stable_across_reruns(tmp_path):
+    store = make_fixture_home(tmp_path)
+    embed_pins(store, FakeEmbedder())
+    first = {c.id: set(c.pin_ids) for c in
+             cluster_store(store, "fake", threshold=FAKE_THRESHOLD).clusters}
+    assert first["photo-01"] != first["photo-02"]
+    # make the smaller photo group the biggest: by size alone the two photo ids would swap
+    small_id = min(("photo-01", "photo-02"), key=lambda i: len(first[i]))
+    color = {"blue": (30, 60, 200), "orange": (230, 120, 30)}[
+        _group(next(iter(first[small_id])))]
+    rng = np.random.default_rng(5)
+    extra = []
+    for i in range(6):
+        make_image(store.abs(f"images/extra-{i}.jpg"), color, rng)
+        extra.append(Pin(id=f"local:extra-{i}", source="local", board="film photo",
+                         image_path=f"images/extra-{i}.jpg"))
+    store.upsert_pins(extra)
+    embed_pins(store, FakeEmbedder())
+    again = cluster_store(store, "fake", threshold=FAKE_THRESHOLD)
+    second = {c.id: set(c.pin_ids) for c in again.clusters}
+    assert set(second) == set(first)
+    for cid, members in first.items():
+        assert members <= second[cid]  # same taste, same id
+    assert len(second[small_id]) > len(second["photo-01" if small_id == "photo-02"
+                                              else "photo-02"])
+    assert sorted(again.kept_ids) == sorted(first) and again.retired_ids == []
+    known = set(second)
+    assert all(n in known for c in again.clusters for n in c.neighbor_cluster_ids)
+    fresh = cluster_store(store, "fake", threshold=FAKE_THRESHOLD, keep_ids=False)
+    assert {c.id for c in fresh.clusters if c.size == len(second[small_id])} == {"photo-01"}
+
+
+def test_stabilize_ids_new_and_retired_clusters():
+    from taste.cluster.core import stabilize_ids
+    from taste.models import ClusterRecord
+
+    def rec(cid, axis, neighbors=()):
+        v = [0.0] * 4
+        v[axis] = 1.0
+        return ClusterRecord(id=cid, domain="web", size=5, pin_ids=["a"], medoid_pin_id="a",
+                             exemplar_pin_ids=["a"], centroid=v, cohesion=1.0,
+                             neighbor_cluster_ids=list(neighbors))
+
+    old = [rec("web-01", 0), rec("web-02", 1), rec("web-03", 2)]
+    # web-02's taste is gone, a new one appears on axis 3, web-03 now listed first
+    new = [rec("web-01", 2, ["web-02"]), rec("web-02", 3), rec("web-03", 0)]
+    out, rename = stabilize_ids(new, old, max_distance=0.2)
+    assert [c.id for c in out] == ["web-03", "web-04", "web-01"]
+    assert out[0].neighbor_cluster_ids == ["web-04"]
+    assert rename == {"web-01": "web-03", "web-02": "web-04", "web-03": "web-01"}

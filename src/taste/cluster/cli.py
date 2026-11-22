@@ -19,6 +19,9 @@ def register(app: typer.Typer) -> None:
             help="Cosine distance where merging stops. Lower = more, tighter clusters."),
         min_size: int = typer.Option(DEFAULT_MIN_SIZE, "--min-size", min=1,
                                      help="Smallest cluster worth keeping."),
+        fresh_ids: bool = typer.Option(
+            False, "--fresh-ids",
+            help="Renumber by size instead of keeping ids from the last run."),
     ) -> None:
         """Group pins into taste clusters per domain and write clusters.json."""
         from rich.console import Console
@@ -35,7 +38,8 @@ def register(app: typer.Typer) -> None:
         try:
             model = get_embedder(settings).name
             missing = len(set(store.pin_domains()) - set(store.read_embeddings(model)[0]))
-            result = cluster_store(store, model, threshold=threshold, min_size=min_size)
+            result = cluster_store(store, model, threshold=threshold, min_size=min_size,
+                                   keep_ids=not fresh_ids)
         except RuntimeError as exc:
             console.print(f"[red]{exc}[/red]")
             raise typer.Exit(1)
@@ -60,4 +64,8 @@ def register(app: typer.Typer) -> None:
         if missing:
             console.print(f"[yellow]{missing} pins have no embedding yet. "
                           "Run `taste embed`.[/yellow]")
+        if result.kept_ids or result.retired_ids:
+            console.print(f"Kept {len(result.kept_ids)} ids from the last run"
+                          + (f"; retired {', '.join(result.retired_ids)}"
+                             if result.retired_ids else "") + ".")
         console.print(f"Wrote {len(result.clusters)} clusters to {store.clusters_path}")

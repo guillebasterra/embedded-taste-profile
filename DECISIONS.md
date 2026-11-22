@@ -51,6 +51,8 @@ Calls made without asking, newest last. One line each.
 - `taste eval` re-clusters the held-in 80% (it imports `taste.cluster.build_clusters`, the cluster package's public function) instead of reusing `clusters.json`, so held-out pins never shape the centroids. It never writes `clusters.json`.
 - Suggested accept threshold is the cut that maximizes TPR minus FPR, moved halfway toward the nearest rejected distractor for margin. It applies to `raw_similarity`.
 - Extras beyond the spec: `--json` on `critique` and `search`, `--force` and `--chunk-size` on `embed`, `--holdout`, `--seed`, `--threshold`, `--min-size` on `eval`.
+- Stable ids (supersedes "ids can shift"): `cluster_store` matches each domain's new centroids to the previous `clusters.json` one-to-one (Hungarian on cosine distance) and keeps an old id when the pair is within `threshold * 0.5`; centroids sit much closer than the average pairwise distance the threshold cuts at. Only a first run (or `--fresh-ids`) numbers by size.
+- An unmatched new cluster gets the next number above the highest id in the previous `clusters.json` for its domain, so it never takes an id that just retired. An id retired two runs back can come back; distill's exemplar check redoes that card anyway. A different centroid length (embedding model switched) skips matching.
 
 ## C — distill
 - The VLM fills small draft schemas (`CardDraft`, `WebCardDraft`, `DomainDraft`, `CrossDomainDraft` in `distill/schemas.py`) instead of the stored contracts; `cluster_id`, `domain`, `exemplar_pin_ids`, `cluster_ids` are stamped from the records afterwards. Field descriptions in the drafts are part of the prompt (they reach the tool schema).
