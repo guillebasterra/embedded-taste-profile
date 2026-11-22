@@ -87,3 +87,5 @@ Calls made without asking, newest last. One line each.
 - `taste install --print-mcp-config` prints the JSON and nothing else, and writes no files, so it can be piped. The home path in it is made absolute.
 - `--export` merges into the target and never deletes anything there (it is the user's context repo); it refuses a target that overlaps `profile/`. `feedback.jsonl` is exported, the images in `feedback/` are not.
 - SKILL.md has a "without the MCP server" section pointing at the plain files, so the exported profile is usable by agents that have no MCP.
+- `get_taste(brief=...)` embeds the brief with the text tower and ranks clusters (optionally one domain) by cosine to their centroids; the reply is standing rules first, every cluster ranked with its one-liner and fit, then the top 3 cards in full. Raw fit values are printed but the agent is told to compare them, since SigLIP text-image cosines sit in a narrow band (~0.1-0.2). Ranking lives in `serve/tools.py`, not `scoring.api`, which is a shared contract.
+- A blank `brief` is ignored (plain `get_taste`); an embedder that cannot load returns a readable message instead of a tool error, like `get_exemplars`.

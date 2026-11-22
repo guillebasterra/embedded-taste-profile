@@ -1,5 +1,7 @@
 import io
 
+import numpy as np
+
 import pytest
 from PIL import Image
 
@@ -198,3 +200,63 @@ def test_log_feedback_refuses_non_image_files(bare, tmp_path):
     with pytest.raises(ToolInputError, match="Not a readable image"):
         tools.log_feedback(bare, "like", "note", secret)
     assert list(bare.feedback_dir.iterdir()) == []
+
+
+# ---- get_taste(brief=...) ------------------------------------------------------
+
+
+@pytest.fixture
+def ranked_home(built):
+    """Three clusters whose centroids are real FakeEmbedder vectors of their images."""
+    from taste.models import ClusterRecord
+
+    emb = FakeEmbedder()
+    pins = {p.id: p for p in built.read_pins()}
+
+    def rec(cid, domain, group):
+        ids = sorted(i for i in pins if i.startswith(f"local:{group}-"))
+        v = emb.embed_images([built.abs(pins[i].image_path) for i in ids]).mean(axis=0)
+        return ClusterRecord(id=cid, domain=domain, size=len(ids), pin_ids=ids,
+                             medoid_pin_id=ids[0], exemplar_pin_ids=ids,
+                             centroid=(v / np.linalg.norm(v)).tolist(), cohesion=0.9,
+                             top_boards=[pins[ids[0]].board])
+
+    built.write_clusters([rec("web-01", "web", "dark"), rec("web-02", "web", "cream"),
+                          rec("photo-01", "photo", "blue")])
+    profile = built.read_profile()
+    built.write_profile(profile.model_copy(update={"rules": ["Never center body text"]}))
+    return built
+
+
+def test_get_taste_brief_ranks_clusters_and_shows_top_cards(ranked_home):
+    text = tools.get_taste(ranked_home, brief="a calm blue photo series",
+                           embedder=FakeEmbedder())
+    ranking = text.split("## Clusters, best fit first")[1].split("##")[0]
+    assert ranking.strip().startswith("1. photo-01 (photo")
+    assert "Blue Film: Blue Film one-liner" in ranking
+    assert "Never center body text" in text.split("## Clusters")[0]
+    assert "Blue Film principle A" in text  # top card in full
+    assert "CARD-MD" in text  # module C's markdown is preferred when present
+
+
+def test_get_taste_brief_respects_domain(ranked_home):
+    text = tools.get_taste(ranked_home, "web", brief="a calm blue photo series",
+                           embedder=FakeEmbedder())
+    assert "photo-01" not in text and "web-01" in text and "web-02" in text
+
+
+def test_get_taste_brief_without_clusters_or_cards(bare):
+    assert "taste" in tools.get_taste(bare, brief="anything", embedder=FakeEmbedder())
+    from taste.cluster import cluster_store
+    from taste.embed.index import embed_pins
+
+    embed_pins(bare, FakeEmbedder())
+    cluster_store(bare, "fake", threshold=0.3, min_size=2)
+    text = tools.get_taste(bare, brief="blue", embedder=FakeEmbedder())
+    assert "1. photo-" in text and "taste distill" in text
+    assert "no taste clusters in the 'art' domain" in tools.get_taste(
+        bare, "art", brief="blue", embedder=FakeEmbedder())
+
+
+def test_get_taste_blank_brief_is_ignored(built):
+    assert tools.get_taste(built, brief="  ") == tools.get_taste(built)

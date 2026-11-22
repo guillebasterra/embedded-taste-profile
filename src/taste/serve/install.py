@@ -35,10 +35,11 @@ exemplar images. Consult it instead of guessing or falling back on generic defau
 
 ## Tools (MCP server `taste`)
 
-- `get_taste(domain?, detail?)`: no arguments returns `TASTE.md` (summary, cross-domain
-  invariants, standing corrections). Pass a domain (`web`, `photo`, `art`, `fashion`,
-  `other`) for that domain, and `detail="full"` for its cluster cards with principles,
-  do, avoid and tokens.
+- `get_taste(domain?, detail?, brief?)`: no arguments returns `TASTE.md` (summary,
+  cross-domain invariants, standing corrections). Pass a domain (`web`, `photo`, `art`,
+  `fashion`, `other`) for that domain, and `detail="full"` for its cluster cards with
+  principles, do, avoid and tokens. Pass `brief` (a sentence about the project) to get my
+  clusters ranked by fit to it, with the best-fitting cards in full.
 - `get_exemplars(query, domain?, k?)`: reference images I saved that match a text query,
   as thumbnails. Use when a principle is too abstract to act on.
 - `critique(image_path)`: scores an image against my taste and returns the best-matching
@@ -54,8 +55,8 @@ exemplar images. Consult it instead of guessing or falling back on generic defau
    or never happen.
 2. Standing corrections in `TASTE.md` override cluster cards, and cluster cards override
    your defaults.
-3. There are several tastes per domain. Pick the cluster that fits the task and stay
-   inside it; do not average them.
+3. There are several tastes per domain. Pick the cluster that fits the task (call
+   `get_taste` with a `brief` to rank them) and stay inside it; do not average them.
 4. If a tool says the profile is not built, tell me which `taste` command it named.
 
 ## Without the MCP server
@@ -69,8 +70,8 @@ CLAUDE_SNIPPET_MD = """## Visual taste
 
 I have a taste profile served by the `taste` MCP server.
 
-- Before any visual decision (UI, layout, type, color, imagery), call `get_taste`, and
-  `get_exemplars` when you need reference images.
+- Before any visual decision (UI, layout, type, color, imagery), call `get_taste` (with a
+  one-sentence `brief` of the project), and `get_exemplars` when you need reference images.
 - After producing a screenshot or image, call `critique` on it and fix what it flags.
 - Log every visual correction with `log_feedback` (`like`, `dislike` or `rule`), in my
   words, without being asked.

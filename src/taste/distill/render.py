@@ -218,8 +218,9 @@ def render_taste_md(profile: TasteProfile, cards: list[ClusterCard] | None = Non
     out += ["", "## Query deeper", "",
             "Web tokens live in [DESIGN.md](DESIGN.md). With the `taste` MCP server connected:",
             "",
-            "- `get_taste(domain, detail)`: a domain file, or with `detail=\"full\"` its "
-            "cluster cards. Call before visual decisions.",
+            "- `get_taste(domain, detail, brief)`: a domain file, with `detail=\"full\"` its "
+            "cluster cards, with `brief` the clusters ranked for a project. Call before "
+            "visual decisions.",
             "- `get_exemplars(query, domain, k)`: reference images for a text query. Look at "
             "them instead of guessing from words.",
             "- `critique(image_path)`: scores a screenshot or draft against the clusters and "

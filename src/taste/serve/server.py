@@ -59,9 +59,10 @@ def build_server(home: str | Path | None = None):
 
     @tool("get_taste")
     def get_taste(domain: Optional[str] = None,
-                  detail: Literal["summary", "full"] = "summary") -> str:
+                  detail: Literal["summary", "full"] = "summary",
+                  brief: Optional[str] = None) -> str:
         with guard():
-            return tools.get_taste(store, domain, detail)
+            return tools.get_taste(store, domain, detail, brief)
 
     @tool("get_exemplars")
     def get_exemplars(query: str, domain: Optional[str] = None, k: int = 6) -> list:

@@ -15,7 +15,14 @@ from pathlib import Path
 
 from taste.config import DOMAINS, Settings, load_settings
 from taste.interfaces import Embedder, FakeEmbedder
-from taste.models import ClusterCard, CritiqueResult, DomainSummary, ExemplarHit, Feedback
+from taste.models import (
+    ClusterCard,
+    ClusterRecord,
+    CritiqueResult,
+    DomainSummary,
+    ExemplarHit,
+    Feedback,
+)
 from taste.scoring import api as scoring_api
 from taste.store import Store
 
@@ -24,6 +31,7 @@ VERDICTS = ("like", "dislike", "rule")
 DETAILS = ("summary", "full")
 THUMB_MAX_PX = 512
 MAX_K = 12
+BRIEF_TOP_CARDS = 3  # cards shown in full for a brief; the rest are one line each
 PIPELINE = "taste ingest -> taste domains -> taste embed -> taste cluster -> taste distill"
 
 TOOL_DESCRIPTIONS = {
@@ -34,7 +42,10 @@ TOOL_DESCRIPTIONS = {
         "TASTE.md: the summary, cross-domain invariants and standing corrections. Pass a "
         "domain (web, photo, art, fashion, other) for that domain's summary, and "
         "detail='full' to also get every taste cluster card in it (principles, do, avoid, "
-        "tokens). Text only."
+        "tokens). When you know what you are designing, pass brief (a sentence or two about "
+        "the project, e.g. 'landing page for a climbing gym, playful and loud'): every taste "
+        "cluster is ranked by fit to it and the best-fitting cards come back in full, so you "
+        "know which of the user's several tastes to follow. Text only."
     ),
     "get_exemplars": (
         "Find reference images the user has saved that match a text query, returned as text "
@@ -192,11 +203,15 @@ def _card_text(store: Store, card_id: str, cards: dict[str, ClusterCard]) -> str
     return render_card(cards[card_id]) if card_id in cards else None
 
 
-def get_taste(store: Store, domain: str | None = None, detail: str = "summary") -> str:
-    """TASTE.md, a domain file, or a domain file plus its cluster cards."""
+def get_taste(store: Store, domain: str | None = None, detail: str = "summary",
+              brief: str | None = None, embedder: Embedder | None = None) -> str:
+    """TASTE.md, a domain file, or a domain file plus its cluster cards. With `brief`, the
+    clusters ranked by how well they fit that project description instead."""
     if detail not in DETAILS:
         raise ToolInputError(f"detail must be one of: {', '.join(DETAILS)}.")
     domain = _check_domain(domain)
+    if brief is not None and brief.strip():
+        return taste_for_brief(store, brief.strip(), domain, embedder)
 
     if domain is None:
         path = store.profile_dir / "TASTE.md"
@@ -220,6 +235,61 @@ def get_taste(store: Store, domain: str | None = None, detail: str = "summary") 
     if not sections:
         return text + "\n\n(No cluster cards have been distilled for this domain yet.)"
     return "\n\n---\n\n".join([text.rstrip(), *[s.rstrip() for s in sections]]) + "\n"
+
+
+def rank_clusters(store: Store, brief: str, domain: str | None = None,
+                  embedder: Embedder | None = None) -> list[tuple[ClusterRecord, float]]:
+    """Clusters by cosine similarity between the brief (text tower) and their centroids."""
+    import numpy as np
+
+    clusters = [c for c in store.read_clusters() if domain is None or c.domain == domain]
+    if not clusters:
+        return []
+    embedder = embedder or embedder_for(store)
+    query = np.asarray(embedder.embed_texts([brief])[0], dtype=np.float32)
+    cents = np.asarray([c.centroid for c in clusters], dtype=np.float32)
+    if cents.shape[1] != query.shape[0]:
+        raise ToolInputError("clusters.json was built with a different embedding model. "
+                             f"Ask the user to run `taste cluster --home {store.home}`.")
+    cents /= np.maximum(np.linalg.norm(cents, axis=1, keepdims=True), 1e-12)
+    sims = cents @ (query / max(float(np.linalg.norm(query)), 1e-12))
+    order = sorted(range(len(clusters)), key=lambda i: (-float(sims[i]), clusters[i].id))
+    return [(clusters[i], float(sims[i])) for i in order]
+
+
+def taste_for_brief(store: Store, brief: str, domain: str | None = None,
+                    embedder: Embedder | None = None) -> str:
+    """Standing rules, every cluster ranked against the brief, and the top cards in full."""
+    if not store.clusters_path.exists():
+        return not_built_message(store, "clusters.json")
+    try:
+        ranked = rank_clusters(store, brief, domain, embedder)
+    except RuntimeError as exc:  # the embedder cannot load (missing extra, no weights)
+        return f"Could not rank clusters for the brief: {exc}"
+    if not ranked:
+        where = f"the '{domain}' domain" if domain else "this profile"
+        return f"There are no taste clusters in {where} yet."
+    cards = {c.cluster_id: c for c in store.read_cards()}
+    lines = [f"# Taste for this brief\n\nBrief: {brief}"]
+    profile = store.read_profile()
+    if profile and profile.rules:
+        lines.append("## Standing corrections (always apply)\n\n" + _bullets(profile.rules))
+    table = []
+    for n, (c, sim) in enumerate(ranked, 1):
+        card = cards.get(c.id)
+        label = f"{card.name}: {card.one_liner}" if card else f"boards: {', '.join(c.top_boards)}"
+        table.append(f"{n}. {c.id} ({c.domain}, {c.size} pins, fit {sim:.3f}) {label}")
+    lines.append("## Clusters, best fit first\n\n" + "\n".join(table) + "\n\nFit is the "
+                 "cosine similarity between the brief and the cluster's images; compare "
+                 "values, not their size. Lead with the first cluster and borrow from the "
+                 "next ones only where they agree with it.")
+    top = [t for c, _ in ranked[:BRIEF_TOP_CARDS] if (t := _card_text(store, c.id, cards))]
+    if top:
+        lines.append("## Best-fitting cards")
+        lines += [t.rstrip() for t in top]
+    else:
+        lines.append("(No cluster cards have been distilled yet; run `taste distill`.)")
+    return "\n\n".join(lines) + "\n"
 
 
 # ---------------------------------------------------------------------------
