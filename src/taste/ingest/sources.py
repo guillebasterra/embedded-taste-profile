@@ -318,3 +318,47 @@ def _parse_rfc2822(value: object) -> datetime | None:
         return parsedate_to_datetime(value)
     except (TypeError, ValueError):
         return None
+
+
+# ---- gallery-dl (unofficial, logged-in or public scrape into a local folder) -------------
+
+GALLERY_DL_DIR = "gallery-dl"  # under TASTE_HOME; kept so reruns only fetch new pins
+_PROFILE_URL = re.compile(r"^https?://([a-z0-9-]+\.)?pinterest\.[a-z.]+/([^/?#]+)", re.I)
+
+
+def gallery_dl_command() -> list[str]:
+    """`gallery-dl` when installed, else through `uvx` (no dependency of ours)."""
+    if exe := shutil.which("gallery-dl"):
+        return [exe]
+    if uvx := shutil.which("uvx"):
+        return [uvx, "gallery-dl"]
+    raise IngestError("gallery-dl is not installed. Install it (`uv tool install gallery-dl`) "
+                      "or install uv so `uvx gallery-dl` works.")
+
+
+def gallery_dl_root(store: Store, url: str) -> Path:
+    """Folder gallery-dl writes this profile's boards to: <home>/gallery-dl/pinterest/<user>."""
+    match = _PROFILE_URL.match(url.strip())
+    if not match or match.group(2).lower() in {"pin", "search", "ideas"}:
+        raise IngestError("Expected a profile or board URL like "
+                          "https://www.pinterest.com/<user>/")
+    return store.home / GALLERY_DL_DIR / "pinterest" / match.group(2)
+
+
+def run_gallery_dl(store: Store, url: str, browser: str | None = None,
+                   run: Callable[..., object] | None = None) -> tuple[Path, int]:
+    """Download (new) pins with gallery-dl: images without videos, a metadata sidecar per
+    image, and a download archive so reruns skip what is on disk. Returns (folder, exit code).
+    gallery-dl exits non-zero when any single request fails, so the caller only warns."""
+    import subprocess
+
+    root = gallery_dl_root(store, url)
+    base = store.home / GALLERY_DL_DIR
+    base.mkdir(parents=True, exist_ok=True)
+    cmd = [*gallery_dl_command(), "-o", "videos=false", "--write-metadata",
+           "-d", str(base), "--download-archive", str(base / "archive.sqlite3")]
+    if browser:
+        cmd += ["--cookies-from-browser", browser]
+    cmd.append(url.strip())
+    proc = (run or subprocess.run)(cmd, check=False)
+    return root, int(getattr(proc, "returncode", 0) or 0)

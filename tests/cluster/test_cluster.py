@@ -218,3 +218,19 @@ def test_stabilize_ids_new_and_retired_clusters():
     assert [c.id for c in out] == ["web-03", "web-04", "web-01"]
     assert out[0].neighbor_cluster_ids == ["web-04"]
     assert rename == {"web-01": "web-03", "web-02": "web-04", "web-03": "web-01"}
+
+
+def test_cluster_cli_reuses_last_threshold(tmp_path, monkeypatch):
+    from taste.cli import app
+
+    monkeypatch.setenv("TASTE_EMBEDDER", "fake")
+    monkeypatch.setenv("COLUMNS", "200")
+    make_fixture_home(tmp_path)
+    runner = CliRunner()
+    assert runner.invoke(app, ["embed", "--home", str(tmp_path)]).exit_code == 0
+    first = runner.invoke(app, ["cluster", "--home", str(tmp_path), "--threshold", "0.3",
+                                "--min-size", "3"])
+    assert "threshold 0.3, min size 3" in first.output
+    again = runner.invoke(app, ["cluster", "--home", str(tmp_path)])
+    assert again.exit_code == 0 and "threshold 0.3, min size 3" in again.output
+    assert "Kept 5 ids" in again.output

@@ -279,3 +279,57 @@ def test_ingest_public_board(home):
     assert (by_id["pub:111"].width, by_id["pub:111"].image_path) == (73, "images/pub-111.jpg")
     assert by_id["pub:222"].width == 23 and small.call_count == 1
     assert by_id["pub:111"].board == "Brutal Web"
+
+
+# ---- gallery-dl source and the recorded last source -----------------------------------
+
+def test_ingest_gallery_dl_runs_tool_then_imports_and_records_source(home, monkeypatch):
+    from taste.ingest import pipeline, sources
+
+    calls = []
+
+    def fake_run(cmd, check=False):
+        calls.append(cmd)
+        board = Store(home).home / "gallery-dl" / "pinterest" / "me" / "Moodboard"
+        board.mkdir(parents=True, exist_ok=True)
+        (board / "a.jpg").write_bytes(image_bytes((10, 200, 10)))
+        (board / "a.jpg.json").write_text(json.dumps({"title": "Leaf"}))
+        return type("Proc", (), {"returncode": 4})()  # one board failed
+
+    monkeypatch.setattr(sources, "gallery_dl_command", lambda: ["gallery-dl"])
+    monkeypatch.setattr("subprocess.run", fake_run)
+    result = run("ingest", "--home", home, "--source", "gallery-dl",
+                 "--url", "https://www.pinterest.com/me/", "--browser", "chrome")
+    assert result.exit_code == 0, result.output
+    assert "exited with code 4" in result.output and "1 new" in result.output
+    cmd = calls[0]
+    assert cmd[0] == "gallery-dl" and cmd[-1] == "https://www.pinterest.com/me/"
+    assert "--write-metadata" in cmd and "videos=false" in cmd
+    assert cmd[cmd.index("--cookies-from-browser") + 1] == "chrome"
+    assert [p.title for p in Store(home).read_pins()] == ["Leaf"]
+    assert pipeline.read_last_source(Store(home)) == {
+        "source": "gallery-dl", "url": "https://www.pinterest.com/me/", "browser": "chrome",
+        "board": [], "path": None}
+
+
+def test_gallery_dl_url_validation(home):
+    from taste.ingest import sources
+
+    store = Store(home)
+    assert sources.gallery_dl_root(store, "https://www.pinterest.com/me/b/").name == "me"
+    for bad in ("https://example.com/me", "https://www.pinterest.com/pin/123/"):
+        result = run("ingest", "--home", home, "--source", "gallery-dl", "--url", bad)
+        assert result.exit_code == 1 and "profile or board URL" in result.output
+
+
+def test_local_ingest_records_absolute_path_but_limited_runs_do_not(tmp_path, home):
+    from taste.ingest import pipeline
+
+    root = tmp_path / "mood"
+    root.mkdir()
+    make_folder(root)
+    assert run("ingest", "--home", home, "--source", "local", "--path", root,
+               "--limit", "1").exit_code == 0
+    assert pipeline.read_last_source(Store(home)) is None
+    assert run("ingest", "--home", home, "--source", "local", "--path", root).exit_code == 0
+    assert pipeline.read_last_source(Store(home))["path"] == str(root.resolve())

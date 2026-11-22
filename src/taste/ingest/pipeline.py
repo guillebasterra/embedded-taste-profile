@@ -13,6 +13,7 @@ from taste.models import Pin
 from taste.store import Store
 
 STATE_FILE = "ingest_state.json"  # boards finished by an API run that hit the rate limit
+SOURCE_FILE = "ingest_source.json"  # how the last successful ingest ran, for `taste update`
 
 
 @dataclass
@@ -97,3 +98,18 @@ def write_done_boards(store: Store, board_ids: set[str]) -> None:
 
 def clear_done_boards(store: Store) -> None:
     _state_path(store).unlink(missing_ok=True)
+
+
+# ---- last source, replayed by `taste update` ----------------------------------------
+
+def write_last_source(store: Store, source: dict) -> None:
+    store.home.mkdir(parents=True, exist_ok=True)
+    (store.home / SOURCE_FILE).write_text(json.dumps(source, indent=2))
+
+
+def read_last_source(store: Store) -> dict | None:
+    try:
+        data = json.loads((store.home / SOURCE_FILE).read_text())
+    except (OSError, ValueError):
+        return None
+    return data if isinstance(data, dict) and data.get("source") else None

@@ -9,16 +9,37 @@ import typer
 
 from taste.cluster.core import DEFAULT_MIN_SIZE, DEFAULT_THRESHOLD
 
+PARAMS_FILE = "cluster_params.json"  # last --threshold / --min-size, reused by default
+
+
+def read_params(store) -> dict:
+    import json
+
+    try:
+        data = json.loads((store.home / PARAMS_FILE).read_text())
+    except (OSError, ValueError):
+        return {}
+    return {k: data[k] for k in ("threshold", "min_size")
+            if isinstance(data, dict) and isinstance(data.get(k), (int, float))}
+
+
+def write_params(store, **params) -> None:
+    import json
+
+    (store.home / PARAMS_FILE).write_text(json.dumps(params, indent=2))
+
 
 def register(app: typer.Typer) -> None:
     @app.command()
     def cluster(
         home: Optional[Path] = typer.Option(None, "--home", help="TASTE_HOME (default ~/.taste)."),
-        threshold: float = typer.Option(
-            DEFAULT_THRESHOLD, "--threshold", min=0.0, max=2.0,
-            help="Cosine distance where merging stops. Lower = more, tighter clusters."),
-        min_size: int = typer.Option(DEFAULT_MIN_SIZE, "--min-size", min=1,
-                                     help="Smallest cluster worth keeping."),
+        threshold: Optional[float] = typer.Option(
+            None, "--threshold", min=0.0, max=2.0,
+            help="Cosine distance where merging stops. Lower = more, tighter clusters. "
+                 f"Default: the last value used in this home, else {DEFAULT_THRESHOLD}."),
+        min_size: Optional[int] = typer.Option(
+            None, "--min-size", min=1,
+            help=f"Smallest cluster worth keeping. Default: last used, else {DEFAULT_MIN_SIZE}."),
         fresh_ids: bool = typer.Option(
             False, "--fresh-ids",
             help="Renumber by size instead of keeping ids from the last run."),
@@ -35,6 +56,10 @@ def register(app: typer.Typer) -> None:
         console = Console()
         settings = load_settings(home)
         store = Store(settings.home)
+        last = read_params(store)
+        threshold = threshold if threshold is not None else last.get("threshold",
+                                                                    DEFAULT_THRESHOLD)
+        min_size = min_size if min_size is not None else last.get("min_size", DEFAULT_MIN_SIZE)
         try:
             model = get_embedder(settings).name
             missing = len(set(store.pin_domains()) - set(store.read_embeddings(model)[0]))
@@ -43,6 +68,7 @@ def register(app: typer.Typer) -> None:
         except RuntimeError as exc:
             console.print(f"[red]{exc}[/red]")
             raise typer.Exit(1)
+        write_params(store, threshold=threshold, min_size=min_size)
 
         table = Table(title=f"Clusters (threshold {threshold:g}, min size {min_size})")
         for col in ("id", "size", "cohesion", "boards", "palette", "neighbors"):

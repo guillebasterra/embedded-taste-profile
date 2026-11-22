@@ -31,6 +31,8 @@ Calls made without asking, newest last. One line each.
 - Pinterest app review site lives in `docs/` (GitHub Pages from `main:/docs`): a landing page and a privacy policy that discloses the Anthropic upload of exemplar images; contact is GitHub issues, so no email is published.
 - While the API app is unapproved, pins come from gallery-dl (public boards, no cookies) into `TASTE_HOME/gallery-dl/` with a download archive, then `taste ingest --source local`; kept in the home so reruns are incremental.
 - Local ingest reads gallery-dl `--write-metadata` sidecars (`<image>.json`) when present for title (`title`, else `grid_title`), description, alt text (`alt_text`, else Pinterest's `auto_alt_text`), link, board id, original URL and created date. Pin ids stay `local:<sha1>` per spec; board and section still come from the folders so `boards.toml` keys do not depend on the sidecar.
+- New source `--source gallery-dl --url <profile or board>` runs gallery-dl (installed, else `uvx gallery-dl`) into `TASTE_HOME/gallery-dl/` with `videos=false`, `--write-metadata` and a download archive, then does the local import of `gallery-dl/pinterest/<user>`. `--browser` passes `--cookies-from-browser` for secret boards. gallery-dl exits non-zero when any one request fails, so that is a warning, not an error.
+- `taste ingest` records how it ran in `TASTE_HOME/ingest_source.json` (source, url, absolute path, browser, boards) for `taste update`; runs with `--limit` are trials and are not recorded.
 
 ## B — embed / cluster / scoring
 - Embedder `name` for SigLIP is the model id itself (`Store` slugs it), so switching `TASTE_EMBED_MODEL` gets its own embeddings directory.
@@ -53,6 +55,7 @@ Calls made without asking, newest last. One line each.
 - Extras beyond the spec: `--json` on `critique` and `search`, `--force` and `--chunk-size` on `embed`, `--holdout`, `--seed`, `--threshold`, `--min-size` on `eval`.
 - Stable ids (supersedes "ids can shift"): `cluster_store` matches each domain's new centroids to the previous `clusters.json` one-to-one (Hungarian on cosine distance) and keeps an old id when the pair is within `threshold * 0.5`; centroids sit much closer than the average pairwise distance the threshold cuts at. Only a first run (or `--fresh-ids`) numbers by size.
 - An unmatched new cluster gets the next number above the highest id in the previous `clusters.json` for its domain, so it never takes an id that just retired. An id retired two runs back can come back; distill's exemplar check redoes that card anyway. A different centroid length (embedding model switched) skips matching.
+- `taste cluster` without `--threshold`/`--min-size` reuses the last values used in that home (`TASTE_HOME/cluster_params.json`), so `taste update` keeps a tuned threshold instead of quietly going back to 0.35.
 
 ## C — distill
 - The VLM fills small draft schemas (`CardDraft`, `WebCardDraft`, `DomainDraft`, `CrossDomainDraft` in `distill/schemas.py`) instead of the stored contracts; `cluster_id`, `domain`, `exemplar_pin_ids`, `cluster_ids` are stamped from the records afterwards. Field descriptions in the drafts are part of the prompt (they reach the tool schema).
@@ -89,3 +92,8 @@ Calls made without asking, newest last. One line each.
 - SKILL.md has a "without the MCP server" section pointing at the plain files, so the exported profile is usable by agents that have no MCP.
 - `get_taste(brief=...)` embeds the brief with the text tower and ranks clusters (optionally one domain) by cosine to their centroids; the reply is standing rules first, every cluster ranked with its one-liner and fit, then the top 3 cards in full. Raw fit values are printed but the agent is told to compare them, since SigLIP text-image cosines sit in a narrow band (~0.1-0.2). Ranking lives in `serve/tools.py`, not `scoring.api`, which is a shared contract.
 - A blank `brief` is ignored (plain `get_taste`); an embedder that cannot load returns a readable message instead of a tool error, like `get_exemplars`.
+
+## Update
+- `taste update` runs the regular commands in-process (`ingest` replaying `ingest_source.json`, `domains`, `embed`, `cluster`, `distill`, `install`) so output and exit codes are the same as running them by hand; it stops at the first non-zero exit (ingest's rate-limit 3 included). Every step is already incremental, so a rerun after a stop redoes nothing finished.
+- `domains` runs on every update: new boards get a guessed domain and are included straight away; the table shows them as "new (guessed)".
+- `--export` is remembered in `TASTE_HOME/update_state.json` (only after a run that succeeds); `install` runs every time since it is cheap and keeps SKILL.md current.

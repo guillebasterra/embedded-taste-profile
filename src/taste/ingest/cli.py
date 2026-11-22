@@ -15,6 +15,7 @@ class Source(str, Enum):
     api = "api"
     public = "public"
     local = "local"
+    gallery_dl = "gallery-dl"
 
 
 def _fail(message: str) -> "typer.Exit":
@@ -84,8 +85,10 @@ def auth(
 
 def ingest(
     home: Optional[Path] = HomeOpt,
-    source: Source = typer.Option(Source.api, "--source", help="api | public | local"),
-    url: Optional[str] = typer.Option(None, "--url", help="Board URL (--source public)."),
+    source: Source = typer.Option(Source.api, "--source",
+                                  help="api | public | local | gallery-dl"),
+    url: Optional[str] = typer.Option(
+        None, "--url", help="Board URL (public), or profile URL (gallery-dl)."),
     path: Optional[Path] = typer.Option(None, "--path", help="Image folder (--source local)."),
     board: list[str] = typer.Option([], "--board",
                                     help="Only this board, by name or id (repeatable; api)."),
@@ -96,6 +99,10 @@ def ingest(
     max_requests: Optional[int] = typer.Option(
         None, "--max-requests", min=1,
         help="Stop after this many Pinterest API requests (stay under a daily cap)."),
+    browser: Optional[str] = typer.Option(
+        None, "--browser",
+        help="gallery-dl only: read Pinterest cookies from this browser (e.g. chrome) to "
+             "include secret boards. Without it only public boards are fetched."),
 ) -> None:
     """Pull pins and their images into the taste home. Re-running only fetches what is new."""
     import httpx
@@ -111,7 +118,18 @@ def ingest(
     stopped_wait: float | None = None
     stopped = False
     try:
-        if source is Source.local:
+        if source is Source.gallery_dl:
+            if not url:
+                raise IngestError(
+                    "--source gallery-dl needs --url https://www.pinterest.com/<user>/")
+            typer.echo("Running gallery-dl (unofficial; only new pins are downloaded)...")
+            path, code = sources.run_gallery_dl(store, url, browser)
+            if code:
+                typer.echo(f"gallery-dl exited with code {code}: some pins or boards failed. "
+                           "Importing what was downloaded; re-run to retry.")
+            if not path.is_dir():
+                raise IngestError(f"gallery-dl wrote nothing to {path}.")
+        if source in (Source.local, Source.gallery_dl):
             if path is None:
                 raise IngestError("--source local needs --path <dir>.")
             local = sources.fetch_local(store, path, limit)
@@ -161,6 +179,11 @@ def ingest(
                 stats.total = len(store.read_pins())
     except IngestError as exc:
         raise _fail(str(exc)) from None
+    if limit is None:  # a capped run is a trial, not the source to replay
+        pipeline.write_last_source(store, {
+            "source": source.value, "url": url, "browser": browser, "board": board or [],
+            "path": str(Path(path).expanduser().resolve())
+            if source is Source.local and path else None})
 
     typer.echo(f"{stats.seen} pins seen, {stats.new} new, {stats.downloaded} images saved, "
                f"{stats.already} already on disk, {stats.failed} failed. "

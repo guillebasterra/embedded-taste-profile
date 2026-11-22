@@ -19,13 +19,13 @@ PINTEREST_ACCESS_TOKEN=...
 
 ## Get the pins in (pick one)
 
-**A. Local folder (works today).** Any folder where each first-level subfolder is a board.
+**A. gallery-dl (works today, unofficial).** Runs gallery-dl into `~/.taste/gallery-dl/` (images plus a metadata sidecar each, no videos, only new pins on reruns), then imports the folder. Public boards only, unless you add `--browser chrome` (or another browser) to use its logged-in session for secret boards.
 
 ```bash
-# one way to fill it: gallery-dl with a logged-in browser session (unofficial; my own boards)
-uvx gallery-dl --cookies-from-browser chrome "https://www.pinterest.com/<username>/"
-uv run taste ingest --source local --path ./gallery-dl/pinterest/<username>
+uv run taste ingest --source gallery-dl --url https://www.pinterest.com/<username>/
 ```
+
+Any other folder where each first-level subfolder is a board works with `--source local --path <dir>`.
 
 **B. Official API.** Needs an approved developer app (website + privacy policy).
 
@@ -44,6 +44,12 @@ uv run taste embed
 uv run taste cluster         # tune --threshold against the printed median distances
 uv run taste distill
 uv run taste install --export ~/me/vault/taste
+```
+
+Later, one command refreshes everything incrementally (replays the last `taste ingest`, keeps cluster ids and your tuned threshold, re-distills only changed clusters, re-exports):
+
+```bash
+uv run taste update --export ~/me/vault/taste   # --export is remembered afterwards
 ```
 
 ## Use it

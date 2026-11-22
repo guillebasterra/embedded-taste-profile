@@ -26,6 +26,7 @@ _MODULES = (
     "taste.scoring.cli",  # critique, search, eval
     "taste.distill.cli",  # distill
     "taste.serve.cli",    # serve, feedback, install
+    "taste.update.cli",   # update (chains the others)
 )
 
 for _name in _MODULES:
