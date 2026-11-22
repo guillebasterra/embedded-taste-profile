@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Privacy Policy — Taste Profile</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main>
+  <p><a href="index.html">← Taste Profile</a></p>
+  <h1>Privacy Policy</h1>
+  <p class="meta">Taste Profile · Last updated November 22, 2026</p>
+
+  <p>Taste Profile is a personal, open-source tool built and operated by Guillermo Basterra for his own use. It connects to one Pinterest account, his own. This policy explains what data the tool accesses and what happens to it.</p>
+
+  <h2>Data accessed from Pinterest</h2>
+  <p>With the account owner's authorization, the tool reads the following through the Pinterest API, using read-only permissions (<code>boards:read</code>, <code>boards:read_secret</code>, <code>pins:read</code>, <code>pins:read_secret</code>, <code>user_accounts:read</code>):</p>
+  <ul>
+    <li>Board names and section names</li>
+    <li>Pin titles, descriptions, alt text, links and creation dates</li>
+    <li>Pin images</li>
+  </ul>
+  <p>The tool never writes to Pinterest. It does not create, edit or delete pins or boards, and it does not access any other user's account.</p>
+
+  <h2>Where the data is stored</h2>
+  <p>Everything is stored as plain files on the account owner's own computer. There is no server and no database operated by this tool. Access tokens are stored locally in a file readable only by the owner's user account, and are never logged or shared.</p>
+
+  <h2>Third-party services</h2>
+  <ul>
+    <li><strong>Anthropic (Claude API):</strong> to write text descriptions of each visual style, the tool sends a small number of example pin images, and their board names and titles, to Anthropic's API. This data is handled under <a href="https://www.anthropic.com/legal/privacy">Anthropic's privacy policy</a> and commercial terms.</li>
+    <li><strong>Hugging Face:</strong> the image-embedding model is downloaded from Hugging Face and run locally. No Pinterest data is sent to Hugging Face.</li>
+  </ul>
+  <p>No data is sold, rented, or used for advertising. This website uses no cookies, analytics or tracking.</p>
+
+  <h2>Retention and deletion</h2>
+  <p>Data is kept on the owner's computer until the owner deletes it. Deleting the tool's data folder removes it completely. Access can be revoked at any time from Pinterest's settings under <em>Security and logins → Apps</em>.</p>
+
+  <h2>Contact</h2>
+  <p>Questions about this policy: open an issue at <a href="https://github.com/guillebasterra/embedded-taste-profile/issues">github.com/guillebasterra/embedded-taste-profile/issues</a>.</p>
+</main>
+</body>
+</html>
