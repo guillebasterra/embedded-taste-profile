@@ -268,6 +268,8 @@ def get_exemplars(store: Store, query: str, domain: str | None = None, k: int = 
                                   domain=domain, k=k)
     except NotImplementedError:
         return ExemplarsReply("Search is not available in this install of taste.")
+    except RuntimeError as exc:  # embeddings or clusters not built yet
+        return ExemplarsReply(f"{exc} Run `taste embed` and `taste cluster` first.")
     hits = list(hits)[:k]
     if not hits:
         if not _has_embeddings(store):
@@ -346,6 +348,8 @@ def critique(store: Store, image_path: str | Path,
         result = scoring_api.critique(store, embedder or embedder_for(store), path)
     except NotImplementedError:
         return CritiqueReply("Critique is not available in this install of taste.")
+    except (RuntimeError, FileNotFoundError) as exc:  # profile not built yet, or image gone
+        return CritiqueReply(f"{exc} Run `taste embed` and `taste cluster` first.")
 
     cards = {c.cluster_id: c for c in store.read_cards()}
     best = result.nearest[0] if result.nearest else None

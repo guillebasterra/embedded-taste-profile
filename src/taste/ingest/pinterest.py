@@ -114,7 +114,18 @@ class PinterestClient:
 
     # ---- endpoints ------------------------------------------------------------
     def boards(self) -> Iterator[dict]:
-        return self.paginate("/boards", {"privacy": "ALL"})
+        """All boards; falls back to public ones when the token lacks the secret-board scope."""
+        try:
+            first = self.get("/boards", {"page_size": MAX_PAGE_SIZE, "privacy": "ALL"})
+        except ApiError as exc:
+            if getattr(exc, "status", None) not in (400, 401, 403):
+                raise
+            yield from self.paginate("/boards")
+            return
+        yield from first.get("items") or []
+        bookmark = first.get("bookmark")
+        if bookmark:
+            yield from self.paginate("/boards", {"privacy": "ALL", "bookmark": bookmark})
 
     def sections(self, board_id: str) -> Iterator[dict]:
         return self.paginate(f"/boards/{board_id}/sections")
