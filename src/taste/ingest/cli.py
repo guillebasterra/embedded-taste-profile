@@ -138,6 +138,12 @@ def ingest(
             stats.no_image = 0
             if local.invalid:
                 typer.echo(f"Skipped {len(local.invalid)} file(s) Pillow could not read.")
+            if local.unsupported:
+                kinds = ", ".join(f"{n} {ext}" for ext, n in sorted(local.unsupported.items()))
+                typer.echo(f"Skipped files taste does not read: {kinds}."
+                           + (" HEIC needs macOS (sips) to convert."
+                              if any(e in sources.HEIF_SUFFIXES for e in local.unsupported)
+                              else ""))
         elif source is Source.public:
             if not url:
                 raise IngestError("--source public needs --url <board url>.")

@@ -20,6 +20,8 @@ from taste.models import Pin
 from taste.store import Store
 
 IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp", ".tif", ".tiff"}
+HEIF_SUFFIXES = {".heic", ".heif"}  # Pillow cannot read these: converted to JPEG on import
+QUIET_SUFFIXES = {".json", ".part", ".sqlite3"}  # gallery-dl sidecars, partials, archive
 
 
 # ---- Pinterest API ----------------------------------------------------------------
@@ -231,6 +233,7 @@ class LocalResult:
     copied: int = 0
     already: int = 0
     invalid: list[str] = field(default_factory=list)
+    unsupported: dict[str, int] = field(default_factory=dict)  # suffix -> files skipped
 
 
 def fetch_local(store: Store, root: str | Path, limit: int | None = None) -> LocalResult:
@@ -244,14 +247,23 @@ def fetch_local(store: Store, root: str | Path, limit: int | None = None) -> Loc
     store.images_dir.mkdir(parents=True, exist_ok=True)
     result = LocalResult()
     seen: set[str] = set()
-    files = sorted(p for p in root.rglob("*")
-                   if p.is_file() and p.suffix.lower() in IMAGE_SUFFIXES
-                   and not any(part.startswith(".") for part in p.relative_to(root).parts))
+    convert = heif_converter()
+    files = []
+    for p in sorted(root.rglob("*")):
+        if not p.is_file() or any(part.startswith(".") for part in p.relative_to(root).parts):
+            continue
+        suffix = p.suffix.lower()
+        if suffix in IMAGE_SUFFIXES or (suffix in HEIF_SUFFIXES and convert):
+            files.append(p)
+        elif suffix not in QUIET_SUFFIXES:
+            key = suffix or "(none)"
+            result.unsupported[key] = result.unsupported.get(key, 0) + 1
     for path in files:
         if limit is not None and len(result.pins) >= limit:
             break
+        heif = path.suffix.lower() in HEIF_SUFFIXES
         try:
-            ext, width, height = inspect_image(path)
+            ext, width, height = ("jpg", 0, 0) if heif else inspect_image(path)
         except Exception:
             result.invalid.append(str(path.relative_to(root)))
             continue
@@ -259,14 +271,21 @@ def fetch_local(store: Store, root: str | Path, limit: int | None = None) -> Loc
         pin_id = f"local:{digest}"
         if pin_id in seen:  # byte-identical duplicate: the first location wins
             continue
-        seen.add(pin_id)
         parts = path.relative_to(root).parts
         dest = store.images_dir / f"local-{digest}.{ext}"
         if dest.exists():
             result.already += 1
         else:
-            shutil.copyfile(path, dest)
+            try:
+                (convert if heif else shutil.copyfile)(path, dest)  # type: ignore[operator]
+            except Exception:
+                dest.unlink(missing_ok=True)
+                result.invalid.append(str(path.relative_to(root)))
+                continue
             result.copied += 1
+        if heif:
+            _, width, height = inspect_image(dest)
+        seen.add(pin_id)
         meta = gallery_dl_metadata(path)
         result.pins.append(Pin(
             id=pin_id, source="local",
@@ -279,6 +298,22 @@ def fetch_local(store: Store, root: str | Path, limit: int | None = None) -> Loc
             image_path=store.rel(dest), width=width, height=height,
         ))
     return result
+
+
+def heif_converter() -> Callable[[Path, Path], None] | None:
+    """HEIC/HEIF -> JPEG with macOS `sips` (no extra Python dependency). None elsewhere."""
+    sips = shutil.which("sips")
+    if not sips:
+        return None
+
+    def convert(src: Path, dest: Path) -> None:
+        import subprocess
+
+        subprocess.run([sips, "-s", "format", "jpeg", "-s", "formatOptions", "92",
+                        str(src), "--out", str(dest)],
+                       check=True, capture_output=True, timeout=60)
+
+    return convert
 
 
 def gallery_dl_metadata(image: Path) -> dict:

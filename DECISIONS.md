@@ -33,6 +33,8 @@ Calls made without asking, newest last. One line each.
 - Local ingest reads gallery-dl `--write-metadata` sidecars (`<image>.json`) when present for title (`title`, else `grid_title`), description, alt text (`alt_text`, else Pinterest's `auto_alt_text`), link, board id, original URL and created date. Pin ids stay `local:<sha1>` per spec; board and section still come from the folders so `boards.toml` keys do not depend on the sidecar.
 - New source `--source gallery-dl --url <profile or board>` runs gallery-dl (installed, else `uvx gallery-dl`) into `TASTE_HOME/gallery-dl/` with `videos=false`, `--write-metadata` and a download archive, then does the local import of `gallery-dl/pinterest/<user>`. `--browser` passes `--cookies-from-browser` for secret boards. gallery-dl exits non-zero when any one request fails, so that is a warning, not an error.
 - `taste ingest` records how it ran in `TASTE_HOME/ingest_source.json` (source, url, absolute path, browser, boards) for `taste update`; runs with `--limit` are trials and are not recorded.
+- HEIC/HEIF pins (about 1.5% of my live boards) are converted to JPEG at import with macOS `sips`, keyed by the sha1 of the original bytes, so nothing downstream needs a HEIF decoder; without `sips` they are skipped and reported. Adding `pillow-heif` would be the portable fix but touches `pyproject.toml`, so it was not done.
+- Local ingest now reports files it does not read, by suffix (videos, HEIC without sips); gallery-dl sidecars, `.part` files and the archive are ignored without a message.
 
 ## B — embed / cluster / scoring
 - Embedder `name` for SigLIP is the model id itself (`Store` slugs it), so switching `TASTE_EMBED_MODEL` gets its own embeddings directory.

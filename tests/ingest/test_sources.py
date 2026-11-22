@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import shutil
 
 import httpx
 import pytest
@@ -268,3 +269,61 @@ def test_fetch_local_reads_gallery_dl_sidecars(tmp_path, home):
     assert tad.description is None and tad.link is None
     assert tad.image_url.endswith("33ab.jpg") and tad.created_at.year == 2026
     assert pins["plain"].board_id is None and pins["plain"].alt_text is None
+
+
+def _heic_folder(tmp_path):
+    root = tmp_path / "boards"
+    (root / "b").mkdir(parents=True)
+    (root / "b" / "x.heic").write_bytes(b"pretend heic")
+    (root / "b" / "clip.m4v").write_bytes(b"video")
+    (root / "b" / "x.heic.json").write_text("{}")
+    (root / "b" / "y.jpg.part").write_bytes(b"partial")
+    (root / "b" / "ok.jpg").write_bytes(image_bytes((9, 9, 9)))
+    return root
+
+
+def test_fetch_local_converts_heic_and_reports_unsupported(tmp_path, home, monkeypatch):
+    def fake_convert(src, dest):
+        Image.new("RGB", (7, 5), (1, 2, 3)).save(dest, "JPEG")
+
+    monkeypatch.setattr(sources, "heif_converter", lambda: fake_convert)
+    result = sources.fetch_local(Store(home).ensure(), _heic_folder(tmp_path))
+    heic = next(p for p in result.pins if p.title == "x")
+    digest = hashlib.sha1(b"pretend heic").hexdigest()[:16]
+    assert heic.id == f"local:{digest}" and heic.image_path == f"images/local-{digest}.jpg"
+    assert (heic.width, heic.height) == (7, 5)
+    assert result.unsupported == {".m4v": 1} and result.copied == 2
+
+
+def test_fetch_local_without_converter_skips_heic(tmp_path, home, monkeypatch):
+    monkeypatch.setattr(sources, "heif_converter", lambda: None)
+    result = sources.fetch_local(Store(home).ensure(), _heic_folder(tmp_path))
+    assert [p.title for p in result.pins] == ["ok"]
+    assert result.unsupported == {".heic": 1, ".m4v": 1}
+
+
+def test_fetch_local_failed_conversion_is_invalid(tmp_path, home, monkeypatch):
+    def broken(src, dest):
+        dest.write_bytes(b"half")
+        raise RuntimeError("sips failed")
+
+    monkeypatch.setattr(sources, "heif_converter", lambda: broken)
+    store = Store(home).ensure()
+    result = sources.fetch_local(store, _heic_folder(tmp_path))
+    assert result.invalid == ["b/x.heic"] and [p.title for p in result.pins] == ["ok"]
+    assert len(list(store.images_dir.iterdir())) == 1  # the half-written jpg was removed
+
+
+@pytest.mark.skipif(shutil.which("sips") is None, reason="needs macOS sips")
+def test_heif_converter_with_real_sips(tmp_path):
+    import subprocess
+
+    src_jpg = tmp_path / "a.jpg"
+    Image.new("RGB", (40, 30), (200, 10, 10)).save(src_jpg)
+    heic = tmp_path / "a.heic"
+    subprocess.run(["sips", "-s", "format", "heic", str(src_jpg), "--out", str(heic)],
+                   check=True, capture_output=True)
+    out = tmp_path / "out.jpg"
+    sources.heif_converter()(heic, out)
+    with Image.open(out) as im:
+        assert im.format == "JPEG" and im.size == (40, 30)
