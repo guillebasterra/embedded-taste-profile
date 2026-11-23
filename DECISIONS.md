@@ -60,6 +60,7 @@ Calls made without asking, newest last. One line each.
 - The SigLIP 2 checkpoint logs a bos/eos token id warning on load (ids outside the 32k vocab); left alone, since the text tower only pads and search results are sensible.
 - Live tuning 2026-11-22: `--threshold 0.35 --min-size 8` (30 clusters) instead of the default min size, which left 44 mostly tiny `other` clusters. A single threshold cannot suit both fashion (median 0.33, stays at 2 clusters at any threshold tried, 0.28-0.44) and `other` (0.50); threads carry the finer cross-board structure, so this was left as is.
 - `taste cluster` without `--threshold`/`--min-size` reuses the last values used in that home (`TASTE_HOME/cluster_params.json`), so `taste update` keeps a tuned threshold instead of quietly going back to 0.35.
+- SigLIP loads with `local_files_only=True` first and only falls back to the hub: every `taste serve` start was making five Hugging Face API requests (logged on stderr) before the first tool call, and would stall offline.
 
 ## C — distill
 - The VLM fills small draft schemas (`CardDraft`, `WebCardDraft`, `DomainDraft`, `CrossDomainDraft` in `distill/schemas.py`) instead of the stored contracts; `cluster_id`, `domain`, `exemplar_pin_ids`, `cluster_ids` are stamped from the records afterwards. Field descriptions in the drafts are part of the prompt (they reach the tool schema).
@@ -98,6 +99,7 @@ Calls made without asking, newest last. One line each.
 - SKILL.md has a "without the MCP server" section pointing at the plain files, so the exported profile is usable by agents that have no MCP.
 - `get_taste(brief=...)` embeds the brief with the text tower and ranks clusters (optionally one domain) by cosine to their centroids; the reply is standing rules first, every cluster ranked with its one-liner and fit, then the top 3 cards in full. Raw fit values are printed but the agent is told to compare them, since SigLIP text-image cosines sit in a narrow band (~0.1-0.2). Ranking lives in `serve/tools.py`, not `scoring.api`, which is a shared contract.
 - A blank `brief` is ignored (plain `get_taste`); an embedder that cannot load returns a readable message instead of a tool error, like `get_exemplars`.
+- Brief reply trimmed after the live test (36k chars for a portfolio brief): each thread shows 3 web moves and 2 avoids (the rest are in threads.md), the ranking lists the top 10 clusters, and the full cards drop Measured palette, Neighbors and Exemplars, which an agent cannot act on. Now about 22k chars, 2.3 s with the real embedder.
 
 ## Update
 - `taste update` runs the regular commands in-process (`ingest` replaying `ingest_source.json`, `domains`, `embed`, `cluster`, `distill`, `install`) so output and exit codes are the same as running them by hand; it stops at the first non-zero exit (ingest's rate-limit 3 included). Every step is already incremental, so a rerun after a stop redoes nothing finished.

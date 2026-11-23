@@ -288,3 +288,17 @@ def test_get_taste_brief_without_threads_has_no_section(ranked_home):
     text = tools.get_taste(ranked_home, brief="a calm blue photo series",
                            embedder=FakeEmbedder())
     assert "Threads to carry over" not in text
+
+
+def test_brief_trims_threads_and_cards(ranked_home):
+    threads = [{"name": "Ink", "one_liner": "Flat inks.", "spread": 9.0, "distinctiveness": 4,
+                "for_web": ["m1", "m2", "m3", "m4"], "avoid": ["a1.", "a2.", "a3."]}]
+    (ranked_home.profile_dir / "threads.json").write_text(json.dumps(threads))
+    (ranked_home.profile_dir / "clusters" / "photo-01.md").write_text(
+        "# Blue Film\n\n## Principles\n\n- keep\n\n## Neighbors\n\n- web-01\n\n"
+        "## Exemplars\n\n![x](../exemplars/photo-01/1.jpg)\n")
+    text = tools.get_taste(ranked_home, brief="a calm blue photo series",
+                           embedder=FakeEmbedder())
+    assert "- m3" in text and "- m4" not in text
+    assert "Avoid: a1; a2." in text and "a3" not in text
+    assert "- keep" in text and "## Exemplars" not in text and "## Neighbors" not in text

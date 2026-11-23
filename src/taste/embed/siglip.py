@@ -57,8 +57,12 @@ class SigLIP2Embedder:
             raise EmbedderUnavailable(_INSTALL_HINT) from exc
         device = self._device_override or self._pick_device(torch)
         try:
-            processor = AutoProcessor.from_pretrained(self.model_id)
-            model = AutoModel.from_pretrained(self.model_id)
+            try:  # cached weights first: no hub round trips on every `taste serve` start
+                processor = AutoProcessor.from_pretrained(self.model_id, local_files_only=True)
+                model = AutoModel.from_pretrained(self.model_id, local_files_only=True)
+            except OSError:
+                processor = AutoProcessor.from_pretrained(self.model_id)
+                model = AutoModel.from_pretrained(self.model_id)
         except ImportError as exc:  # e.g. sentencepiece/protobuf missing
             raise EmbedderUnavailable(_INSTALL_HINT) from exc
         except OSError as exc:

@@ -33,6 +33,10 @@ THUMB_MAX_PX = 512
 MAX_K = 12
 BRIEF_TOP_CARDS = 3  # cards shown in full for a brief; the rest are one line each
 BRIEF_THREADS = 6  # signature threads shown with their moves for a brief
+BRIEF_RANKED_SHOWN = 10  # clusters listed in the ranking; the tail is counted
+BRIEF_THREAD_MOVES = 3  # web moves per thread; the rest are in profile/threads.md
+BRIEF_THREAD_AVOID = 2
+BRIEF_CARD_DROP = ("## Measured palette", "## Neighbors", "## Exemplars")  # not for agents
 THREAD_SIGNATURE_MIN = 3  # distinctiveness below this is common ground, named only
 THREADS_FILE = "threads.json"  # profile/threads.json, written by `taste threads`
 PIPELINE = "taste ingest -> taste domains -> taste embed -> taste cluster -> taste distill"
@@ -280,10 +284,10 @@ def threads_for_brief(threads: list[dict]) -> str | None:
              "for this brief too. Translate each into the brief's medium; where two pull "
              "against each other, the best-fitting clusters below say which way to lean."]
     for t in signature[:BRIEF_THREADS]:
-        moves = "\n".join(f"- {m}" for m in t.get("for_web", []))
+        moves = "\n".join(f"- {m}" for m in t.get("for_web", [])[:BRIEF_THREAD_MOVES])
+        avoid = "; ".join(a.rstrip(". ") for a in t.get("avoid", [])[:BRIEF_THREAD_AVOID])
         parts.append(f"### {t['name']} ({t['spread']:g} boards)\n\n{t['one_liner']}\n\n"
-                     f"On the web:\n{moves}\n\nElsewhere: {t.get('for_other_media', '')}\n\n"
-                     f"Avoid: {'; '.join(t.get('avoid', []))}")
+                     f"On the web:\n{moves}\n\nAvoid: {avoid}.")
     rest = [t["name"] for t in signature[BRIEF_THREADS:]]
     if rest:
         parts.append("More threads in profile/threads.md: " + ", ".join(rest) + ".")
@@ -291,6 +295,17 @@ def threads_for_brief(threads: list[dict]) -> str | None:
         parts.append("Common ground, not a signature: "
                      + ", ".join(t["name"] for t in common) + ".")
     return "\n\n".join(parts)
+
+
+def brief_card(text: str) -> str:
+    """A card's markdown without the sections an agent cannot act on (images, pin ids)."""
+    keep, out = True, []
+    for line in text.splitlines():
+        if line.startswith("## "):
+            keep = not line.startswith(BRIEF_CARD_DROP)
+        if keep:
+            out.append(line)
+    return "\n".join(out).rstrip() + "\n"
 
 
 def taste_for_brief(store: Store, brief: str, domain: str | None = None,
@@ -314,15 +329,18 @@ def taste_for_brief(store: Store, brief: str, domain: str | None = None,
     if threads:
         lines.append(threads)
     table = []
-    for n, (c, sim) in enumerate(ranked, 1):
+    for n, (c, sim) in enumerate(ranked[:BRIEF_RANKED_SHOWN], 1):
         card = cards.get(c.id)
         label = f"{card.name}: {card.one_liner}" if card else f"boards: {', '.join(c.top_boards)}"
         table.append(f"{n}. {c.id} ({c.domain}, {c.size} pins, fit {sim:.3f}) {label}")
+    if len(ranked) > BRIEF_RANKED_SHOWN:
+        table.append(f"({len(ranked) - BRIEF_RANKED_SHOWN} weaker fits not listed.)")
     lines.append("## Clusters, best fit first\n\n" + "\n".join(table) + "\n\nFit is the "
                  "cosine similarity between the brief and the cluster's images; compare "
                  "values, not their size. Lead with the first cluster and borrow from the "
                  "next ones only where they agree with it.")
-    top = [t for c, _ in ranked[:BRIEF_TOP_CARDS] if (t := _card_text(store, c.id, cards))]
+    top = [brief_card(t) for c, _ in ranked[:BRIEF_TOP_CARDS]
+           if (t := _card_text(store, c.id, cards))]
     if top:
         lines.append("## Best-fitting cards")
         lines += [t.rstrip() for t in top]

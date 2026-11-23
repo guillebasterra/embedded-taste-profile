@@ -20,11 +20,11 @@ Everything here was built and tested offline: 200 tests pass and the full pipeli
 - [x] `taste distill --only <one cluster id>` first. Confirm the model id in `TASTE_VLM_MODEL` is valid, the forced tool call validates, and 4096 max tokens is enough for a web card. (Sonnet 5.5 rejects forced tool_choice; switched to auto + instruction. `web-01` card validated first try in 31 s for 3 calls.)
 - [x] Read the card. If it says "clean" or "modern" without something observable behind it, fix `src/taste/distill/prompts.py`. (web-01 card is concrete: hex values, sizes, named type classes; no filler.)
 - [x] Full `taste distill`. Check that real cross-domain invariants survive the two-domain filter. (2026-11-23: 34 calls, 10 min; 6 invariants kept, none dropped. Threads section and summary lead with the wide threads.)
-- [ ] Parse `profile/DESIGN.md` front matter with a real YAML parser.
+- [x] Parse `profile/DESIGN.md` front matter with a real YAML parser. (PyYAML `safe_load`: version, name, description, colors, typography, rounded, spacing; one variant per web cluster. `fontFamily` holds type classes, not font names.)
 
 ## 5. Serve
 - [ ] `claude mcp add taste -- taste serve --home ~/.taste`; the four tools appear and `get_exemplars` thumbnails render.
-- [ ] First tool call with the real embedder stays within the client's tool timeout and nothing leaks onto stdout.
+- [x] First tool call with the real embedder stays within the client's tool timeout and nothing leaks onto stdout. (Driven over stdio with the `mcp` client: init 0.25 s, first `get_taste(brief)` 2.3 s incl. model load, `get_exemplars` returns 3 images; stdout clean.)
 - [ ] Copy `profile/SKILL.md` to `~/.claude/skills/taste/SKILL.md`; check agents call `log_feedback` when I correct a visual choice.
 
 ## 6. Calibrate
