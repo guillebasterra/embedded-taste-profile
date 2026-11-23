@@ -1,6 +1,23 @@
 # taste
 
-Turn my Pinterest boards into a portable visual taste profile any AI agent can query. `SPEC.md` is the contract, `DECISIONS.md` logs every call made along the way, `NEXT.md` is the first-live-run checklist.
+Turn my Pinterest boards into a visual taste profile that AI agents read before making design decisions for me.
+
+## At a glance
+
+```
+Pinterest boards ──▶ images on disk ──▶ what each image looks like ──▶ taste profile ──▶ agents
+   (gallery-dl)        (~1,300 pins)      (pixels + Claude reading)     (TASTE.md)      (MCP server)
+```
+
+- **Ingest** my boards (images + titles) into `~/.taste`.
+- **Read every pin for how it looks, not what it shows:** palette, light, texture, composition, finish, era. Measured locally, read by Claude Haiku.
+- **Find threads:** bundles of qualities that recur across unrelated boards (film grain in clothes, rooms and surf photos; flat-ink print logic in web, sketchbooks and software). These are the taste that holds in any medium.
+- **Cluster** each domain (web, art, fashion, other) into concrete taste groups with SigLIP embeddings, and have Claude write a card for each: principles, do, avoid, tokens.
+- **Serve** it to Claude Code over MCP. `get_taste(brief="portfolio site...")` returns the threads to carry over plus the clusters that best fit the project; `critique` scores a screenshot against my taste; `log_feedback` keeps my corrections as standing rules.
+
+Output lives in `~/.taste/profile/`: `TASTE.md` (the entry point), `threads.md`, `DESIGN.md` (web tokens), one card per cluster, thumbnails.
+
+`SPEC.md` is the contract, `DECISIONS.md` logs every judgment call, `NEXT.md` is the first-live-run checklist.
 
 ## Setup
 
@@ -40,9 +57,12 @@ uv run taste ingest          # or set PINTEREST_ACCESS_TOKEN and skip auth
 
 ```bash
 uv run taste domains         # then edit ~/.taste/boards.toml: fix domains, exclude boards
-uv run taste embed
-uv run taste cluster         # tune --threshold against the printed median distances
-uv run taste distill
+uv run taste embed           # SigLIP 2, local; ~1 min for 1,400 pins on Apple silicon
+uv run taste facets          # measure + read every pin (Claude Haiku, ~$1 for 1,300 pins)
+uv run taste threads         # find cross-board threads, write their cards; opens nothing,
+                             #   contact sheet at ~/.taste/facets/threads.html
+uv run taste cluster --threshold 0.35 --min-size 8   # tune against the printed medians
+uv run taste distill         # cluster cards, domain summaries, TASTE.md (Claude Sonnet)
 uv run taste install --export ~/me/vault/taste
 ```
 
@@ -55,7 +75,8 @@ uv run taste update --export ~/me/vault/taste   # --export is remembered afterwa
 ## Use it
 
 ```bash
-claude mcp add taste -- taste serve --home ~/.taste
+claude mcp add -s user taste -- "$PWD/.venv/bin/taste" serve --home ~/.taste
+cp ~/.taste/profile/SKILL.md ~/.claude/skills/taste/SKILL.md
 uv run taste critique ./screenshot.png
 uv run taste search "dense editorial grid"
 uv run taste feedback add rule "Never center body text"
