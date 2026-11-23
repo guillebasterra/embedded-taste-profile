@@ -41,9 +41,10 @@ def test_build_request_structure(tmp_path):
     assert req["model"] == "some-model" and req["system"] == "SYS" and req["max_tokens"] > 0
     assert len(req["messages"]) == 1 and req["messages"][0]["role"] == "user"
     content = req["messages"][0]["content"]
-    assert [b["type"] for b in content] == ["text", "image", "text", "image", "text"]
+    assert [b["type"] for b in content] == ["text", "image", "text", "image", "text", "text"]
     assert content[0]["text"] == "Image 1:" and content[2]["text"] == "Image 2:"
-    assert content[-1]["text"] == "PROMPT"
+    assert content[-2]["text"] == "PROMPT"
+    assert content[-1]["text"] == "Answer only by calling the record_web_card_draft tool."
     src = content[1]["source"]
     assert src["type"] == "base64" and src["media_type"] == "image/jpeg"
     with Image.open(io.BytesIO(base64.b64decode(src["data"]))) as im:
@@ -55,11 +56,11 @@ def test_build_request_structure(tmp_path):
     tool = req["tools"][0]
     assert tool["name"] == "record_web_card_draft"
     assert tool["input_schema"] == WebCardDraft.model_json_schema()
-    assert req["tool_choice"] == {"type": "tool", "name": tool["name"]}
+    assert req["tool_choice"] == {"type": "auto"}  # forced choice is a 400 on Sonnet 5.5
 
     text_only = llm.build_request("m", "P", ClusterCard)
     assert "system" not in text_only
-    assert text_only["messages"][0]["content"] == [{"type": "text", "text": "P"}]
+    assert text_only["messages"][0]["content"][0] == {"type": "text", "text": "P"}
 
 
 class StubClient:

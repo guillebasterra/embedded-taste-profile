@@ -76,8 +76,9 @@ def build_request(model: str, prompt: str, schema: type[BaseModel],
     """Keyword arguments for `client.messages.create`.
 
     Images come first, each preceded by a text block "Image N:" (1-based, in list order), so
-    prompts can refer to images by number. The answer is forced through one tool call whose
-    input schema is the pydantic JSON schema.
+    prompts can refer to images by number. The answer comes back through one tool call whose
+    input schema is the pydantic JSON schema. tool_choice is "auto" plus an instruction naming
+    the tool, because Sonnet 5.5 and Opus 5.5 reject a forced tool_choice with a 400.
     """
     content: list[dict[str, Any]] = []
     for i, path in enumerate(images or [], start=1):
@@ -87,9 +88,10 @@ def build_request(model: str, prompt: str, schema: type[BaseModel],
             "source": {"type": "base64", "media_type": "image/jpeg",
                        "data": encode_image(Path(path))},
         })
-    content.append({"type": "text", "text": prompt})
-
     name = tool_name_for(schema)
+    content.append({"type": "text", "text": prompt})
+    content.append({"type": "text", "text": f"Answer only by calling the {name} tool."})
+
     request: dict[str, Any] = {
         "model": model,
         "max_tokens": max_tokens,
@@ -102,7 +104,7 @@ def build_request(model: str, prompt: str, schema: type[BaseModel],
             ),
             "input_schema": schema.model_json_schema(),
         }],
-        "tool_choice": {"type": "tool", "name": name},
+        "tool_choice": {"type": "auto"},
     }
     if system:
         request["system"] = system
