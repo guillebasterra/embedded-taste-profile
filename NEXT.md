@@ -23,9 +23,9 @@ Everything here was built and tested offline: 200 tests pass and the full pipeli
 - [x] Parse `profile/DESIGN.md` front matter with a real YAML parser. (PyYAML `safe_load`: version, name, description, colors, typography, rounded, spacing; one variant per web cluster. `fontFamily` holds type classes, not font names.)
 
 ## 5. Serve
-- [ ] `claude mcp add taste -- taste serve --home ~/.taste`; the four tools appear and `get_exemplars` thumbnails render.
+- [x] `claude mcp add taste -- taste serve --home ~/.taste`; the four tools appear and `get_exemplars` thumbnails render. (2026-11-23: added at user scope with the venv's absolute `taste` path so it works from any repo; `claude mcp list` shows it connected.)
 - [x] First tool call with the real embedder stays within the client's tool timeout and nothing leaks onto stdout. (Driven over stdio with the `mcp` client: init 0.25 s, first `get_taste(brief)` 2.3 s incl. model load, `get_exemplars` returns 3 images; stdout clean.)
-- [ ] Copy `profile/SKILL.md` to `~/.claude/skills/taste/SKILL.md`; check agents call `log_feedback` when I correct a visual choice.
+- [ ] Copy `profile/SKILL.md` to `~/.claude/skills/taste/SKILL.md`; check agents call `log_feedback` when I correct a visual choice. (Copied 2026-11-23. The `log_feedback` check needs a real design session.)
 
 ## 6. Calibrate
 - [ ] `taste eval --distractors <folder of generic images>`: AUC tells me whether `critique` agrees with me. Revisit the note bands in `src/taste/scoring/` if not.
