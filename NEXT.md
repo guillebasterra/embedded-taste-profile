@@ -10,7 +10,7 @@ Everything here was built and tested offline: 200 tests pass and the full pipeli
 ## 2. Ingest my boards
 - [x] Local route: gallery-dl output folder -> `taste ingest --source local`. Check board names come through as folder names. (2026-11-22: now `taste ingest --source gallery-dl --url .../guillebasterra/`; 65 public boards, 1,553 files -> 1,290 unique pins, since 263 are the same image on several boards. Three board lookups get 403 without login, probably secret boards.)
 - [ ] API route (only if the Pinterest app gets approved): 2026-11-22 the token gets 401 code 3 "consumer type is not supported" on every endpoint, so the app is not approved for v5 reads yet. `taste auth` round trip, real 429 shape, real `media.images` keys, whether board pins already include section pins.
-- [ ] `taste domains`, then hand-edit `boards.toml`. (2026-11-22: ran; 52 of 65 boards guessed `other`, waiting for review.)
+- [ ] `taste domains`, then hand-edit `boards.toml`. (2026-11-22: ran; 52 of 65 boards guessed `other`, waiting for review.) Chrome cookies (`--browser chrome`) brought in the secret boards: 69 boards, 1,421 pins; 4 new boards mapped by hand. Real embed of 1,420 pins: 48 s wall, 3.4 GB peak RSS on mps.
 
 ## 3. Clustering on real embeddings
 - [ ] `taste cluster` and compare the cluster count per domain with my own sense of how many tastes I have there. Default `--threshold 0.35` is a guess; the command prints each domain's median pairwise distance to tune against.
