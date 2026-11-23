@@ -13,11 +13,11 @@ Everything here was built and tested offline: 200 tests pass and the full pipeli
 - [ ] `taste domains`, then hand-edit `boards.toml`. (2026-11-22: ran; 52 of 65 boards guessed `other`, waiting for review.) Chrome cookies (`--browser chrome`) brought in the secret boards: 69 boards, 1,421 pins; 4 new boards mapped by hand. Real embed of 1,420 pins: 48 s wall, 3.4 GB peak RSS on mps.
 
 ## 3. Clustering on real embeddings
-- [ ] `taste cluster` and compare the cluster count per domain with my own sense of how many tastes I have there. Default `--threshold 0.35` is a guess; the command prints each domain's median pairwise distance to tune against.
-- [ ] Clustering builds a full pairwise matrix per domain: check time and memory on the biggest domain.
+- [x] `taste cluster` and compare the cluster count per domain with my own sense of how many tastes I have there. Default `--threshold 0.35` is a guess; the command prints each domain's median pairwise distance to tune against. (2026-11-22: medians web 0.49, art 0.39, fashion 0.33, other 0.50. Defaults gave 62 clusters, 44 of them in `other` and many of 4-9 pins; settled on `--threshold 0.35 --min-size 8`: 30 clusters, web 2, art 5, fashion 2, other 21, photo skipped at 6 pins. Cross-domain taste now comes from threads, so clusters only need to be solid exemplar sets.)
+- [x] Clustering builds a full pairwise matrix per domain: check time and memory on the biggest domain. (874 pins in `other`: whole run 9 s wall.)
 
 ## 4. Distill with Claude
-- [ ] `taste distill --only <one cluster id>` first. Confirm the model id in `TASTE_VLM_MODEL` is valid, the forced tool call validates, and 4096 max tokens is enough for a web card.
+- [x] `taste distill --only <one cluster id>` first. Confirm the model id in `TASTE_VLM_MODEL` is valid, the forced tool call validates, and 4096 max tokens is enough for a web card. (Sonnet 5.5 rejects forced tool_choice; switched to auto + instruction. `web-01` card validated first try in 31 s for 3 calls.)
 - [ ] Read the card. If it says "clean" or "modern" without something observable behind it, fix `src/taste/distill/prompts.py`.
 - [ ] Full `taste distill`. Check that real cross-domain invariants survive the two-domain filter.
 - [ ] Parse `profile/DESIGN.md` front matter with a real YAML parser.

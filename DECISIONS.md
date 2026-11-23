@@ -58,6 +58,7 @@ Calls made without asking, newest last. One line each.
 - Stable ids (supersedes "ids can shift"): `cluster_store` matches each domain's new centroids to the previous `clusters.json` one-to-one (Hungarian on cosine distance) and keeps an old id when the pair is within `threshold * 0.5`; centroids sit much closer than the average pairwise distance the threshold cuts at. Only a first run (or `--fresh-ids`) numbers by size.
 - An unmatched new cluster gets the next number above the highest id in the previous `clusters.json` for its domain, so it never takes an id that just retired. An id retired two runs back can come back; distill's exemplar check redoes that card anyway. A different centroid length (embedding model switched) skips matching.
 - The SigLIP 2 checkpoint logs a bos/eos token id warning on load (ids outside the 32k vocab); left alone, since the text tower only pads and search results are sensible.
+- Live tuning 2026-11-22: `--threshold 0.35 --min-size 8` (30 clusters) instead of the default min size, which left 44 mostly tiny `other` clusters. A single threshold cannot suit both fashion (median 0.33, stays at 2 clusters at any threshold tried, 0.28-0.44) and `other` (0.50); threads carry the finer cross-board structure, so this was left as is.
 - `taste cluster` without `--threshold`/`--min-size` reuses the last values used in that home (`TASTE_HOME/cluster_params.json`), so `taste update` keeps a tuned threshold instead of quietly going back to 0.35.
 
 ## C — distill
