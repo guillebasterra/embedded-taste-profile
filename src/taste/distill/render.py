@@ -14,6 +14,8 @@ from taste.models import ClusterCard, ClusterRecord, DomainSummary, TasteProfile
 MCP_TOOLS = ("get_taste", "get_exemplars", "critique", "log_feedback")
 TASTE_MD_MAX_LINES = 80
 MAX_INVARIANTS_SHOWN = 10
+MAX_THREADS_SHOWN = 10
+SIGNATURE_MIN = 3  # thread distinctiveness at or above this is a signature, below is common
 MAX_RULES_SHOWN = 20
 MAX_SUMMARY_CHARS = 1200
 
@@ -168,7 +170,26 @@ def render_domain_md(summary: DomainSummary, cards: list[ClusterCard]) -> str:
 # TASTE.md
 # ---------------------------------------------------------------------------
 
-def render_taste_md(profile: TasteProfile, cards: list[ClusterCard] | None = None) -> str:
+def render_threads_section(threads: list[dict]) -> list[str]:
+    if not threads:
+        return []
+    signature = [t for t in threads if t["distinctiveness"] >= SIGNATURE_MIN]
+    common = [t for t in threads if t["distinctiveness"] < SIGNATURE_MIN]
+    out = ["## Threads", "",
+           "Qualities that recur across my boards whatever the subject, widest first. Carry "
+           "them into any medium. Full cards, with concrete moves for the web: "
+           "[threads.md](threads.md).", ""]
+    for t in signature[:MAX_THREADS_SHOWN]:
+        out.append(f"- **{_flat(t['name'])}** ({t['spread']:g} boards): "
+                   f"{_first_sentence(t['one_liner'])}")
+    if common:
+        out.append("- Common ground, not a signature: "
+                   + ", ".join(_flat(t["name"]) for t in common) + ".")
+    return out + [""]
+
+
+def render_taste_md(profile: TasteProfile, cards: list[ClusterCard] | None = None,
+                    threads: list[dict] | None = None) -> str:
     """profile/TASTE.md: the entry point. Kept under TASTE_MD_MAX_LINES lines."""
     cards = cards or []
     names = {c.cluster_id: _flat(c.name) for c in cards}
@@ -180,6 +201,7 @@ def render_taste_md(profile: TasteProfile, cards: list[ClusterCard] | None = Non
            "My visual taste, distilled from the images I save. Read this before any visual "
            "decision made on my behalf.", "",
            "## Summary", "", summary, "",
+           *render_threads_section(threads or []),
            "## Invariants", "",
            "Hold in every domain. Each one lists the clusters it rests on.", ""]
     if profile.invariants:

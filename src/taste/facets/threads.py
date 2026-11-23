@@ -65,7 +65,10 @@ def fit_threads(store: Store, k: int = DEFAULT_K, seed: int = 0) -> list[Thread]
 
     vec = TfidfVectorizer(stop_words="english", ngram_range=(1, 2), min_df=min(5, len(ids)),
                           max_df=0.4, sublinear_tf=True)
-    x = vec.fit_transform([thread_doc(readings[i]) for i in ids])
+    try:
+        x = vec.fit_transform([thread_doc(readings[i]) for i in ids])
+    except ValueError as exc:  # every term pruned by min_df/max_df
+        raise ValueError(f"the readings' tags are too uniform to find threads ({exc})") from exc
     terms = np.array(vec.get_feature_names_out())
     nmf = NMF(n_components=k, init="nndsvda", random_state=seed, max_iter=800)
     w = nmf.fit_transform(x)

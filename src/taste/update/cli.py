@@ -54,7 +54,8 @@ def register(app: typer.Typer) -> None:
             None, "--export",
             help="Copy profile/ here at the end (remembered for later runs)."),
     ) -> None:
-        """Refresh everything: ingest, domains, embed, cluster, distill, install (+ export).
+        """Refresh everything: ingest, domains, embed, facets, threads, cluster, distill,
+        install (+ export).
 
         Every step is incremental: only new pins are fetched and embedded, cluster ids stay
         stable, and only clusters whose exemplars changed are re-distilled."""
@@ -72,7 +73,7 @@ def register(app: typer.Typer) -> None:
                             fg=typer.colors.RED, err=True)
                 raise typer.Exit(1)
             steps.append(ingest_args(source))
-        steps += [["domains"], ["embed"], ["cluster"], ["distill"]]
+        steps += [["domains"], ["embed"], ["facets"], ["threads"], ["cluster"], ["distill"]]
         state = _read_state(store.home)
         export_dir = str(export.expanduser().resolve()) if export else state.get("export")
         steps.append(["install", *(["--export", export_dir] if export_dir else [])])

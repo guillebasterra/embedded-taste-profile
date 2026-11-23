@@ -1,5 +1,7 @@
+import json
 import io
 
+import json
 import numpy as np
 
 import pytest
@@ -260,3 +262,29 @@ def test_get_taste_brief_without_clusters_or_cards(bare):
 
 def test_get_taste_blank_brief_is_ignored(built):
     assert tools.get_taste(built, brief="  ") == tools.get_taste(built)
+
+
+def test_get_taste_brief_leads_with_threads(ranked_home):
+    threads = [
+        {"name": "Limited-Ink Print Logic", "one_liner": "Flat inks on paper.", "spread": 11.1,
+         "distinctiveness": 4, "for_web": ["Cream ground #F1ECDD", "No gradients"],
+         "for_other_media": "Two inks.", "avoid": ["glassmorphism", "drop shadows"]},
+        {"name": "Melted Surround", "one_liner": "Blur.", "spread": 26.1,
+         "distinctiveness": 2, "for_web": [], "for_other_media": "", "avoid": []},
+    ]
+    (ranked_home.profile_dir / "threads.json").write_text(json.dumps(threads))
+    text = tools.get_taste(ranked_home, brief="a calm blue photo series",
+                           embedder=FakeEmbedder())
+    head, clusters = text.split("## Clusters, best fit first")
+    part = head.split("## Threads to carry over")[1]
+    assert "### Limited-Ink Print Logic (11.1 boards)" in part
+    assert "- Cream ground #F1ECDD" in part and "Avoid: glassmorphism; drop shadows" in part
+    assert "Common ground, not a signature: Melted Surround." in part
+    assert "### Melted Surround" not in part
+    assert clusters.strip().startswith("1. photo-01")
+
+
+def test_get_taste_brief_without_threads_has_no_section(ranked_home):
+    text = tools.get_taste(ranked_home, brief="a calm blue photo series",
+                           embedder=FakeEmbedder())
+    assert "Threads to carry over" not in text

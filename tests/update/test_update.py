@@ -40,8 +40,9 @@ def test_update_chains_every_step_and_is_incremental(tmp_path, monkeypatch):
 
     first = run("update", "--home", home, "--export", out)
     assert first.exit_code == 0, first.output
-    for step in ("[1/6] taste ingest --source local", "[3/6] taste embed",
-                 "[5/6] taste distill", "[6/6] taste install --export", "up to date"):
+    for step in ("[1/8] taste ingest --source local", "[3/8] taste embed",
+                 "[4/8] taste facets", "[5/8] taste threads", "Skipped threads",
+                 "[7/8] taste distill", "[8/8] taste install --export", "up to date"):
         assert step in first.output
     store = Store(home)
     ids_before = {c.id: set(c.pin_ids) for c in store.read_clusters()}

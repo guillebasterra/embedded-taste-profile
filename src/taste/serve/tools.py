@@ -32,6 +32,9 @@ DETAILS = ("summary", "full")
 THUMB_MAX_PX = 512
 MAX_K = 12
 BRIEF_TOP_CARDS = 3  # cards shown in full for a brief; the rest are one line each
+BRIEF_THREADS = 6  # signature threads shown with their moves for a brief
+THREAD_SIGNATURE_MIN = 3  # distinctiveness below this is common ground, named only
+THREADS_FILE = "threads.json"  # profile/threads.json, written by `taste threads`
 PIPELINE = "taste ingest -> taste domains -> taste embed -> taste cluster -> taste distill"
 
 TOOL_DESCRIPTIONS = {
@@ -39,12 +42,14 @@ TOOL_DESCRIPTIONS = {
         "Read the user's visual taste profile. Call this BEFORE making any visual decision "
         "(layout, typography, color, imagery, styling, art direction, outfit or photo "
         "selection), at the start of any design or frontend task. With no domain it returns "
-        "TASTE.md: the summary, cross-domain invariants and standing corrections. Pass a "
+        "TASTE.md: the summary, the threads (qualities that recur across every kind of "
+        "board), cross-domain invariants and standing corrections. Pass a "
         "domain (web, photo, art, fashion, other) for that domain's summary, and "
         "detail='full' to also get every taste cluster card in it (principles, do, avoid, "
         "tokens). When you know what you are designing, pass brief (a sentence or two about "
-        "the project, e.g. 'landing page for a climbing gym, playful and loud'): every taste "
-        "cluster is ranked by fit to it and the best-fitting cards come back in full, so you "
+        "the project, e.g. 'landing page for a climbing gym, playful and loud'): you get the "
+        "threads with concrete moves to carry into the project whatever its medium, then "
+        "every taste cluster ranked by fit to it with the best-fitting cards in full, so you "
         "know which of the user's several tastes to follow. Text only."
     ),
     "get_exemplars": (
@@ -257,6 +262,37 @@ def rank_clusters(store: Store, brief: str, domain: str | None = None,
     return [(clusters[i], float(sims[i])) for i in order]
 
 
+def read_threads(store: Store) -> list[dict]:
+    import json
+
+    path = store.profile_dir / THREADS_FILE
+    return json.loads(path.read_text()) if path.exists() else []
+
+
+def threads_for_brief(threads: list[dict]) -> str | None:
+    """Signature threads, widest first, with their web moves; common ones named only."""
+    signature = [t for t in threads if t.get("distinctiveness", 0) >= THREAD_SIGNATURE_MIN]
+    common = [t for t in threads if t.get("distinctiveness", 0) < THREAD_SIGNATURE_MIN]
+    if not signature and not common:
+        return None
+    parts = ["## Threads to carry over\n\nThese qualities recur across the user's boards "
+             "whatever the subject (clothes, rooms, objects, drawings, software), so they hold "
+             "for this brief too. Translate each into the brief's medium; where two pull "
+             "against each other, the best-fitting clusters below say which way to lean."]
+    for t in signature[:BRIEF_THREADS]:
+        moves = "\n".join(f"- {m}" for m in t.get("for_web", []))
+        parts.append(f"### {t['name']} ({t['spread']:g} boards)\n\n{t['one_liner']}\n\n"
+                     f"On the web:\n{moves}\n\nElsewhere: {t.get('for_other_media', '')}\n\n"
+                     f"Avoid: {'; '.join(t.get('avoid', []))}")
+    rest = [t["name"] for t in signature[BRIEF_THREADS:]]
+    if rest:
+        parts.append("More threads in profile/threads.md: " + ", ".join(rest) + ".")
+    if common:
+        parts.append("Common ground, not a signature: "
+                     + ", ".join(t["name"] for t in common) + ".")
+    return "\n\n".join(parts)
+
+
 def taste_for_brief(store: Store, brief: str, domain: str | None = None,
                     embedder: Embedder | None = None) -> str:
     """Standing rules, every cluster ranked against the brief, and the top cards in full."""
@@ -274,6 +310,9 @@ def taste_for_brief(store: Store, brief: str, domain: str | None = None,
     profile = store.read_profile()
     if profile and profile.rules:
         lines.append("## Standing corrections (always apply)\n\n" + _bullets(profile.rules))
+    threads = threads_for_brief(read_threads(store))
+    if threads:
+        lines.append(threads)
     table = []
     for n, (c, sim) in enumerate(ranked, 1):
         card = cards.get(c.id)

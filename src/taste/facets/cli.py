@@ -58,6 +58,9 @@ def register(app: typer.Typer) -> None:
         home: Optional[Path] = typer.Option(None, "--home", help="TASTE_HOME (default ~/.taste)."),
         k: int = typer.Option(16, "--k", min=2, help="Number of threads to look for."),
         seed: int = typer.Option(0, "--seed"),
+        describe: bool = typer.Option(True, "--describe/--no-describe",
+                                      help="Name each thread and write its card with the VLM."),
+        force: bool = typer.Option(False, "--force", help="Rewrite every thread card."),
     ) -> None:
         """Find bundles of visual qualities that recur across boards and domains."""
         from rich.console import Console
@@ -68,12 +71,14 @@ def register(app: typer.Typer) -> None:
         from taste.store import Store
 
         console = Console()
-        store = Store(load_settings(home).home)
+        settings = load_settings(home)
+        store = Store(settings.home)
         try:
             found = fit_threads(store, k=k, seed=seed)
-        except ValueError as exc:
-            console.print(f"[red]{exc}[/red]")
-            raise typer.Exit(1)
+        except ValueError as exc:  # too few readings, or tags too uniform to factorize
+            # not an error for `taste update` on a small home: the rest of the chain still runs
+            console.print(f"[yellow]Skipped threads: {exc}[/yellow]", soft_wrap=True)
+            return
         path = write_threads(store, found)
         table = Table("id", "pins", "spread", "qualities", "top boards")
         for t in found:
@@ -83,3 +88,22 @@ def register(app: typer.Typer) -> None:
         console.print(f"Spread is the effective number of boards a thread reaches. "
                       f"Saved {path}; contact sheet: {render_preview(store, found)}",
                       soft_wrap=True)
+        if not describe:
+            return
+        from taste.distill.llm import VLMError, get_vlm
+        from taste.facets.describe import describe_threads
+
+        try:
+            vlm = get_vlm(settings)
+            with console.status(f"Writing thread cards with {vlm.name}"):
+                cards, generated = describe_threads(store, found, vlm, force=force)
+        except VLMError as exc:
+            console.print(f"[red]{exc}[/red]")
+            raise typer.Exit(1)
+        for c in cards:
+            console.print(f"  {c.thread_id} [bold]{c.name}[/bold] "
+                          f"(distinctiveness {c.distinctiveness}/5): {c.one_liner}",
+                          soft_wrap=True)
+        console.print(f"{generated} thread cards written, {len(cards) - generated} reused. "
+                      f"{store.profile_dir / 'threads.md'}. Run `taste distill` to fold them "
+                      "into TASTE.md.", soft_wrap=True)

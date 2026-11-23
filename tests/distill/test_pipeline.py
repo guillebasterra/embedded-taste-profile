@@ -293,3 +293,35 @@ def test_scripted_tokens_and_invariants(store, settings):
                                    "## Shapes", "## Do's and Don'ts")]
     assert order == sorted(order)
     assert "variant `name-web-01`" in md and "single centered column" in md
+
+
+THREADS = [
+    {"name": "Limited-Ink Print Logic", "one_liner": "Flat inks on paper. More.", "pins": 100,
+     "spread": 11.1, "distinctiveness": 4, "boards": {"Web Design": 30, "software": 9}},
+    {"name": "Melted Surround", "one_liner": "Blurred backgrounds.", "pins": 140,
+     "spread": 26.1, "distinctiveness": 2, "boards": {"Items": 9}},
+]
+
+
+def test_threads_feed_the_summary_and_taste_md(store, settings):
+    run_distill(store, settings, FakeVLM())
+    taste_md = (store.profile_dir / "TASTE.md").read_text()
+    assert "## Threads" not in taste_md
+
+    # `taste threads` writes profile/threads.json later: the profile step reruns, alone
+    (store.profile_dir / "threads.json").write_text(json.dumps(THREADS))
+    vlm = FakeVLM()
+    report = run_distill(store, settings, vlm)
+    assert report.profile_generated and len(vlm.calls) == 1
+    prompt = vlm.calls[0]["prompt"]
+    assert "## Threads across boards" in prompt and "Limited-Ink Print Logic" in prompt
+    assert "lead with them" in prompt
+    taste_md = (store.profile_dir / "TASTE.md").read_text()
+    section = taste_md.split("## Threads")[1].split("## Invariants")[0]
+    assert "**Limited-Ink Print Logic** (11.1 boards): Flat inks on paper." in section
+    assert "Common ground, not a signature: Melted Surround." in section
+    assert "[threads.md](threads.md)" in section
+
+    vlm = FakeVLM()
+    run_distill(store, settings, vlm)
+    assert vlm.calls == []  # unchanged threads do not redo the profile

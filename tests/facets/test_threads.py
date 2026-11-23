@@ -8,7 +8,9 @@ from taste.cli import app
 from taste.facets.read import READINGS_FILE, facets_dir, run_facets
 from taste.facets.threads import (effective_count, fit_threads, read_threads, spread_examples,
                                   write_threads)
+from taste.facets.describe import describe_threads, read_cards
 from taste.fixtures import make_fixture_home
+from taste.interfaces import FakeVLM
 
 runner = CliRunner()
 
@@ -74,11 +76,50 @@ def test_effective_count_and_examples():
     assert spread_examples(T, boards, 4) == ["p1", "p3", "p4", "p2"]
 
 
-def test_cli_writes_table_and_preview(tmp_path, monkeypatch):
+def test_cli_writes_table_preview_and_cards(tmp_path, monkeypatch):
     monkeypatch.setenv("COLUMNS", "200")
+    monkeypatch.setenv("TASTE_VLM", "fake")
     store, _ = seed_readings(tmp_path)
     result = runner.invoke(app, ["threads", "--home", str(tmp_path), "--k", "3"])
     assert result.exit_code == 0, result.output
     assert "t01" in result.output and "threads.html" in result.output
+    assert "3 thread cards written, 0 reused" in result.output
     page = (facets_dir(store) / "threads.html").read_text()
     assert page.count("<section>") == 3 and "file://" in page
+    result = runner.invoke(app, ["threads", "--home", str(tmp_path), "--k", "3"])
+    assert "0 thread cards written, 3 reused" in result.output
+
+    result = runner.invoke(app, ["threads", "--home", str(tmp_path), "--k", "3",
+                                 "--no-describe"])
+    assert result.exit_code == 0 and "thread cards" not in result.output
+
+
+def test_cards_reuse_by_members_and_clean_thumbnails(tmp_path):
+    store, _ = seed_readings(tmp_path)
+    found = fit_threads(store, k=3)
+    vlm = FakeVLM()
+    cards, generated = describe_threads(store, found, vlm)
+    assert generated == 3 and [c.thread_id for c in cards] == ["t01", "t02", "t03"]
+    card = cards[0]
+    assert card.pins == len(found[0].pins) and card.exemplars[0] == found[0].pins[0]
+    assert len(card.thumbnails) == 4
+    assert all((store.profile_dir / p).exists() for p in card.thumbnails)
+    prompt = vlm.calls[0]["prompt"]
+    assert "Top terms:" in prompt and "Per-image notes:" in prompt
+    assert len(vlm.calls[0]["images"]) == len(card.exemplars) <= 8
+    assert read_cards(store) == cards
+    md = (store.profile_dir / "threads.md").read_text()
+    assert md.count("## t0") == 3 and "**On the web:**" in md and "![](threads/t01-1.jpg)" in md
+
+    _, generated = describe_threads(store, found, vlm)
+    assert generated == 0
+    _, generated = describe_threads(store, found[:2], vlm, force=True)
+    assert generated == 2
+    assert not list((store.profile_dir / "threads").glob("t03-*.jpg"))
+
+
+def test_cli_skips_quietly_on_a_small_home(tmp_path, monkeypatch):
+    make_fixture_home(tmp_path, n_per_group=1)
+    result = runner.invoke(app, ["threads", "--home", str(tmp_path)])
+    assert result.exit_code == 0 and "Skipped threads" in result.output
+

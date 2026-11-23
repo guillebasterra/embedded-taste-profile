@@ -304,8 +304,25 @@ def domain_summary_prompt(domain: str, cards: list[ClusterCard],
     return "\n".join(lines)
 
 
+def threads_block(threads: list[dict]) -> str:
+    """Thread cards (profile/threads.json) as prompt context, widest first."""
+    if not threads:
+        return ""
+    lines = ["## Threads across boards",
+             "Found separately from the clusters: per-image readings of how each image looks, "
+             "ignoring subject, factorized into qualities that recur together. Spread is the "
+             "effective number of boards a thread reaches; distinctiveness 1-2 means common "
+             "to most saved images, not a signature.", ""]
+    for t in threads:
+        lines.append(f"- {t['name']} ({t['pins']} pins, about {t['spread']} boards, "
+                     f"distinctiveness {t['distinctiveness']}/5; top boards "
+                     f"{', '.join(list(t['boards'])[:4])}): {t['one_liner']}")
+    return "\n".join(lines) + "\n"
+
+
 def invariants_prompt(summaries: list[DomainSummary], cards: list[ClusterCard],
-                      feedback: list[Feedback] | None = None) -> str:
+                      feedback: list[Feedback] | None = None,
+                      threads: list[dict] | None = None) -> str:
     """Step 3. Text only: everything -> overall summary + cross-domain invariants."""
     by_domain: dict[str, list[ClusterCard]] = {}
     for c in cards:
@@ -323,6 +340,9 @@ def invariants_prompt(summaries: list[DomainSummary], cards: list[ClusterCard],
         lines.append("")
         lines.append("\n\n".join(_card_block(c) for c in by_domain.get(s.domain, [])))
         lines.append("")
+    tblock = threads_block(threads or [])
+    if tblock:
+        lines += [tblock.strip("\n"), ""]
     block = _feedback_block(feedback or [])
     if block:
         lines.append(block.strip("\n"))
@@ -333,7 +353,11 @@ def invariants_prompt(summaries: list[DomainSummary], cards: list[ClusterCard],
         "",
         "`summary`: the taste as a whole, for an agent that will read nothing else. Lead with "
         "the traits that hold everywhere, then one clause per domain on how they show up "
-        "there. Keep the observable detail.",
+        "there. Keep the observable detail."
+        + (" Where threads are listed, the wide ones with distinctiveness 3 or more are the "
+           "strongest evidence of what holds everywhere: lead with them, and name any "
+           "tension between them (for example raw and polished living side by side)."
+           if tblock else ""),
         "",
         "`invariants`: traits that cross domains.",
         "- Hard rule: every invariant must cite clusters from at least two different domains "

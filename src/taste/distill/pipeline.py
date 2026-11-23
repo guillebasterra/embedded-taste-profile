@@ -6,6 +6,7 @@ file from the JSON on disk and never touches the VLM.
 
 from __future__ import annotations
 
+import json
 import shutil
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -29,6 +30,7 @@ from . import prompts, render
 from .schemas import CardDraft, CrossDomainDraft, DomainDraft, WebCardDraft
 
 MAX_TARGET_IMAGES = 8
+THREADS_FILE = "threads.json"  # written by `taste threads` (taste.facets)
 MAX_NEIGHBOR_IMAGES = 2
 THUMB_EDGE = 512
 
@@ -224,6 +226,20 @@ def prune_orphans(store: Store, cluster_ids: set[str], domains: set[str]) -> lis
 # Rendering from disk
 # ---------------------------------------------------------------------------
 
+def read_thread_cards(store: Store) -> list[dict]:
+    """profile/threads.json as written by `taste threads`, or [] before it has run."""
+    path = store.profile_dir / THREADS_FILE
+    return json.loads(path.read_text()) if path.exists() else []
+
+
+def threads_changed_since(store: Store, when: datetime) -> bool:
+    path = store.profile_dir / THREADS_FILE
+    if not path.exists():
+        return False
+    stamp = datetime.fromtimestamp(path.stat().st_mtime, timezone.utc)
+    return stamp > (when if when.tzinfo else when.replace(tzinfo=timezone.utc))
+
+
 def render_all(store: Store) -> list[str]:
     """Regenerate every markdown file from the JSON on disk. No VLM."""
     profile_dir = store.profile_dir
@@ -246,7 +262,7 @@ def render_all(store: Store) -> list[str]:
     for summary in summaries:
         write(f"domains/{summary.domain}.md", render.render_domain_md(summary, cards))
     if profile is not None:
-        write("TASTE.md", render.render_taste_md(profile, cards))
+        write("TASTE.md", render.render_taste_md(profile, cards, read_thread_cards(store)))
     web_cards = [c for c in cards if c.domain == "web"]
     write("DESIGN.md", render.render_design_md(web_cards, list(records.values())))
     return written
@@ -368,11 +384,13 @@ def run_distill(store: Store, settings: Settings, vlm: VLM | None = None, *,
     ordered = [summaries[d] for d in DOMAINS if d in summaries]
     profile = store.read_profile()
     stale = (force or profile is None or regenerated_summary
-             or [d.domain for d in profile.domains] != [s.domain for s in ordered])
+             or [d.domain for d in profile.domains] != [s.domain for s in ordered]
+             or threads_changed_since(store, profile.generated_at))
     if stale:
         ordered_cards = [cards[r.id] for r in records if r.id in cards]
         draft = llm.generate(
-            prompts.invariants_prompt(ordered, ordered_cards, evidence_for(feedback, None)),
+            prompts.invariants_prompt(ordered, ordered_cards, evidence_for(feedback, None),
+                                      read_thread_cards(store)),
             CrossDomainDraft, system=prompts.SYSTEM)
         invariants, report.invariants_dropped = filter_invariants(
             draft.invariants, {cid: c.domain for cid, c in cards.items()})
