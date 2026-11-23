@@ -59,7 +59,7 @@ uv run taste ingest          # or set PINTEREST_ACCESS_TOKEN and skip auth
 uv run taste domains         # then edit ~/.taste/boards.toml: fix domains, exclude boards
 uv run taste embed           # SigLIP 2, local; ~1 min for 1,400 pins on Apple silicon
 uv run taste facets          # measure + read every pin (Claude Haiku, ~$1 for 1,300 pins)
-uv run taste threads         # find cross-board threads, write their cards; opens nothing,
+uv run taste threads         # cross-board threads + their cards (Claude Sonnet);
                              #   contact sheet at ~/.taste/facets/threads.html
 uv run taste cluster --threshold 0.35 --min-size 8   # tune against the printed medians
 uv run taste distill         # cluster cards, domain summaries, TASTE.md (Claude Sonnet)
