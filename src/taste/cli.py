@@ -23,6 +23,7 @@ _MODULES = (
     "taste.ingest.cli",   # auth, ingest, domains
     "taste.embed.cli",    # embed
     "taste.cluster.cli",  # cluster
+    "taste.facets.cli",   # facets
     "taste.scoring.cli",  # critique, search, eval
     "taste.distill.cli",  # distill
     "taste.serve.cli",    # serve, feedback, install

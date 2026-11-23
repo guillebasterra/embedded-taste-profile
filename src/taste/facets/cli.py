@@ -1,0 +1,54 @@
+"""`taste facets`."""
+
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Optional
+
+import typer
+
+
+def register(app: typer.Typer) -> None:
+    @app.command()
+    def facets(
+        home: Optional[Path] = typer.Option(None, "--home", help="TASTE_HOME (default ~/.taste)."),
+        sample: Optional[int] = typer.Option(None, "--sample", min=1,
+                                             help="Only this many pending pins, at random."),
+        model: Optional[str] = typer.Option(
+            None, "--model", help="Model for readings (default TASTE_FACETS_MODEL or "
+                                  "claude-haiku-5-5)."),
+        measure_only: bool = typer.Option(False, "--measure-only",
+                                          help="Pixel statistics only, no model calls."),
+        workers: int = typer.Option(8, "--workers", min=1, help="Parallel readings."),
+        force: bool = typer.Option(False, "--force", help="Redo every pin."),
+    ) -> None:
+        """Measure and read every included pin's visual qualities. Incremental."""
+        from rich.console import Console
+        from rich.progress import Progress
+
+        from taste.config import load_settings
+        from taste.distill.llm import VLMError
+        from taste.facets.read import facets_dir, read_model, reading_vlm, run_facets
+        from taste.store import Store
+
+        console = Console()
+        settings = load_settings(home)
+        store = Store(settings.home)
+        try:
+            vlm = None if measure_only else reading_vlm(settings, read_model(model))
+        except VLMError as exc:
+            console.print(f"[red]{exc}[/red]")
+            raise typer.Exit(1)
+        label = "Measuring" if vlm is None else f"Reading with {vlm.name}"
+        with Progress(console=console, transient=True) as progress:
+            task = progress.add_task(label, total=None)
+            stats = run_facets(store, vlm, sample=sample, force=force, workers=workers,
+                               on_progress=lambda d, t: progress.update(task, completed=d,
+                                                                         total=t))
+        console.print(f"{stats.measured} measured, {stats.read} read, {stats.kept} already "
+                      f"done, {len(stats.failed)} failed. Files in {facets_dir(store)}.",
+                      soft_wrap=True)
+        for pin_id, reason in stats.failed[:5]:
+            console.print(f"[yellow]  {pin_id}: {reason}[/yellow]", soft_wrap=True)
+        if stats.failed:
+            raise typer.Exit(1)

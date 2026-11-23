@@ -101,3 +101,13 @@ Calls made without asking, newest last. One line each.
 - `taste update` runs the regular commands in-process (`ingest` replaying `ingest_source.json`, `domains`, `embed`, `cluster`, `distill`, `install`) so output and exit codes are the same as running them by hand; it stops at the first non-zero exit (ingest's rate-limit 3 included). Every step is already incremental, so a rerun after a stop redoes nothing finished.
 - `domains` runs on every update: new boards get a guessed domain and are included straight away; the table shows them as "new (guessed)".
 - `--export` is remembered in `TASTE_HOME/update_state.json` (only after a run that succeeds); `install` runs every time since it is cheap and keeps SKILL.md current.
+
+## Facets
+- New `taste.facets` module (user asked 2026-11-22 for taste that crosses domains): each included pin gets local pixel measures and a VLM reading of how it looks, with the subject in its own field. Domain clusters stay; threads across domains come next.
+- Stored as `TASTE_HOME/facets/measures.jsonl` and `readings.jsonl`, not through `Store`: there is no facets API in the shared `store.py`, so the module owns its own files under `store.home`. Rows are appended as each pin finishes, so a stopped run keeps its work; the last row per pin wins.
+- Registered `taste.facets.cli` in the shared `cli.py` module list, the same one-line edit as `taste.update`.
+- Readings use `claude-haiku-5-5` by default (`TASTE_FACETS_MODEL` or `--model` to change; `config.py` is shared, so the env var is read in the module). One image per call over ~1,300 pins is a bulk extraction job; the 10-pin sample read well. Readings from a different model are not counted as done.
+- Readings go through `get_vlm` with `vlm_model` swapped, so `TASTE_VLM=fake` and the tool-call retry apply unchanged.
+- `typography` and `era` default to "none": Haiku left `typography` out twice in a row on a pin with no text, and "none" is what the prompt asks for there anyway.
+- Measures: 6-color median-cut palette, mean/std luma, mean HSV saturation, Hasler-Suesstrunk colorfulness, mean R-B warmth, edge density (border pixels dropped). On the real pins the middle 90% spans lightness 0.25-0.82, saturation 0-0.51, busyness 0.16-0.76.
+- The user's own art and photography are left out by request.
