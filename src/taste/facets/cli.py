@@ -52,3 +52,34 @@ def register(app: typer.Typer) -> None:
             console.print(f"[yellow]  {pin_id}: {reason}[/yellow]", soft_wrap=True)
         if stats.failed:
             raise typer.Exit(1)
+
+    @app.command()
+    def threads(
+        home: Optional[Path] = typer.Option(None, "--home", help="TASTE_HOME (default ~/.taste)."),
+        k: int = typer.Option(16, "--k", min=2, help="Number of threads to look for."),
+        seed: int = typer.Option(0, "--seed"),
+    ) -> None:
+        """Find bundles of visual qualities that recur across boards and domains."""
+        from rich.console import Console
+        from rich.table import Table
+
+        from taste.config import load_settings
+        from taste.facets.threads import fit_threads, render_preview, write_threads
+        from taste.store import Store
+
+        console = Console()
+        store = Store(load_settings(home).home)
+        try:
+            found = fit_threads(store, k=k, seed=seed)
+        except ValueError as exc:
+            console.print(f"[red]{exc}[/red]")
+            raise typer.Exit(1)
+        path = write_threads(store, found)
+        table = Table("id", "pins", "spread", "qualities", "top boards")
+        for t in found:
+            table.add_row(t.id, str(len(t.pins)), f"{t.spread}", ", ".join(t.terms[:8]),
+                          ", ".join(list(t.boards)[:4]))
+        console.print(table)
+        console.print(f"Spread is the effective number of boards a thread reaches. "
+                      f"Saved {path}; contact sheet: {render_preview(store, found)}",
+                      soft_wrap=True)
