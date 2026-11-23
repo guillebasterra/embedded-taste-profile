@@ -17,7 +17,7 @@ MAX_INVARIANTS_SHOWN = 10
 MAX_THREADS_SHOWN = 10
 SIGNATURE_MIN = 3  # thread distinctiveness at or above this is a signature, below is common
 MAX_RULES_SHOWN = 20
-MAX_SUMMARY_CHARS = 1200
+MAX_SUMMARY_CHARS = 2400  # one paragraph; the line budget is what keeps TASTE.md short
 
 _HEX = re.compile(r"^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$")
 _DIMENSION = re.compile(r"(?<![\w.])(\d+(?:\.\d+)?(?:px|rem|em))\b")
@@ -241,8 +241,8 @@ def render_taste_md(profile: TasteProfile, cards: list[ClusterCard] | None = Non
             "Web tokens live in [DESIGN.md](DESIGN.md). With the `taste` MCP server connected:",
             "",
             "- `get_taste(domain, detail, brief)`: a domain file, with `detail=\"full\"` its "
-            "cluster cards, with `brief` the clusters ranked for a project. Call before "
-            "visual decisions.",
+            "cluster cards, with `brief` the threads to carry over plus the clusters ranked "
+            "for a project. Call before visual decisions.",
             "- `get_exemplars(query, domain, k)`: reference images for a text query. Look at "
             "them instead of guessing from words.",
             "- `critique(image_path)`: scores a screenshot or draft against the clusters and "

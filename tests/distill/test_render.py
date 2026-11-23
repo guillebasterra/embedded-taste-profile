@@ -60,7 +60,7 @@ def test_taste_md_stays_short_and_complete():
         rules=[f"rule {i}" for i in range(60)])
     md = render.render_taste_md(profile, [card()])
     lines = md.splitlines()
-    assert len(lines) <= 80 and max(len(line) for line in lines) < 1500
+    assert len(lines) <= 80 and max(len(line) for line in lines) <= render.MAX_SUMMARY_CHARS
     assert "…and 20 more in `profile.json`" in md and "…and 40 more in `profile.json`" in md
     assert "- **[web](domains/web.md):** First sentence. Clusters: [Ink grids](clusters/web-01.md)." in md
     assert "Second sentence" not in md

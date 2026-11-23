@@ -80,6 +80,7 @@ Calls made without asking, newest last. One line each.
 - `TasteProfile.embed_model` is `settings.embed_model` (or "fake"); `vlm_model` is the VLM's `name`.
 - Anthropic client: no temperature or thinking parameters (forced tool choice), `max_tokens` 4096, SDK retries 4; a truncated (`max_tokens`) or missing tool call counts as a validation failure and gets the one retry.
 - VLM requests use `tool_choice: auto` plus a closing "Answer only by calling the <tool> tool." line: checked live 2026-11-22, Sonnet 5.5 (the default `TASTE_VLM_MODEL`) returns 400 on a forced `tool_choice`. A reply with no tool call already goes through the one validation retry.
+- TASTE.md summary cap raised from 1,200 to 2,400 characters: the live summary came to 1,895 and the cut dropped the per-domain clauses at its end. It is one paragraph, so the 80-line budget is unaffected (live TASTE.md: 58 lines).
 
 ## D — serve
 - The installed SDK is mcp 2.3, where FastMCP was renamed `MCPServer` (`mcp.server.fastmcp` no longer imports). `server.py` tries `mcp.server.mcpserver` first and falls back to `mcp.server.fastmcp`, so it runs on both sides of the `mcp>=1.2` pin.
